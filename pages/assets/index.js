@@ -2,6 +2,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/use-auth';
 
 const STATUS_STYLES = {
   active:      { bg: '#dcfce7', fg: '#166534', label: 'ACTIVE' },
@@ -30,6 +31,7 @@ const t = (key, lang) => T[key]?.[lang] || T[key]?.en || key;
 
 export default function AssetsPage() {
   const [lang, setLang] = useState('en'); // 'en' | 'ta'
+  const { isAuthed, employeeId, fullName, signOut } = useAuth();
   const [assets, setAssets] = useState([]);
   const [classes, setClasses] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -101,7 +103,20 @@ export default function AssetsPage() {
           >
             {lang === 'en' ? 'EN · த' : 'த · EN'}
           </button>
+          {isAuthed ? (
+            <button onClick={signOut} style={S.userChip} title={fullName || 'logged in — click to sign out'}>
+              {employeeId || '✓'}
+            </button>
+          ) : (
+            <Link href="/login" style={S.loginLink}>Sign in</Link>
+          )}
         </header>
+
+        {isAuthed && (
+          <div style={S.actionBar}>
+            <Link href="/assets/new" style={S.newBtn}>+ New Asset</Link>
+          </div>
+        )}
 
         <div style={S.searchWrap}>
           <input
@@ -243,6 +258,20 @@ const S = {
   langBtn: {
     background: '#334155', color: '#fff', border: 'none',
     padding: '6px 12px', borderRadius: 6, fontSize: 13, cursor: 'pointer',
+  },
+  userChip: {
+    background: '#22c55e', color: '#fff', border: 'none', borderRadius: 999,
+    padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+  },
+  loginLink: {
+    color: '#94a3b8', textDecoration: 'none', fontSize: 13,
+    padding: '6px 10px', border: '1px solid #334155', borderRadius: 6,
+  },
+  actionBar: { padding: '10px 16px 0', background: '#f8fafc' },
+  newBtn: {
+    display: 'inline-block', background: '#0f172a', color: '#fff',
+    padding: '10px 16px', borderRadius: 10, fontSize: 14, fontWeight: 600,
+    textDecoration: 'none',
   },
 
   searchWrap: { padding: '12px 16px 0', position: 'relative' },

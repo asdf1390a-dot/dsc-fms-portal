@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/use-auth';
 
 const STATUS_STYLES = {
   active:      { bg: '#dcfce7', fg: '#166534', label: 'ACTIVE' },
@@ -15,6 +16,7 @@ const STATUS_STYLES = {
 export default function AssetDetail() {
   const router = useRouter();
   const { id } = router.query; // machine_asset_number
+  const { isAuthed, employeeId, fullName } = useAuth();
   const [asset, setAsset] = useState(null);
   const [klass, setKlass] = useState(null);
   const [category, setCategory] = useState(null);
@@ -63,6 +65,13 @@ export default function AssetDetail() {
         <header style={S.header}>
           <Link href="/assets" style={S.backLink}>← Assets</Link>
           <h1 style={S.title}>Asset</h1>
+          {isAuthed ? (
+            <span style={S.userChip} title={fullName || 'logged in'}>
+              {employeeId || fullName?.split(' ')[0] || '✓'}
+            </span>
+          ) : (
+            <Link href="/login" style={S.loginLink}>Sign in</Link>
+          )}
         </header>
 
         {loading && <div style={S.loading}>Loading…</div>}
@@ -133,9 +142,17 @@ export default function AssetDetail() {
             </Section>
 
             <div style={S.actions}>
-              <button disabled style={{ ...S.btn, ...S.btnDisabled }} title="Login required">
-                ✎ Edit (login required)
-              </button>
+              {isAuthed ? (
+                <Link href={`/assets/edit/${encodeURIComponent(asset.machine_asset_number)}`}
+                  style={{ ...S.btn, ...S.btnPrimary, textDecoration: 'none', textAlign: 'center' }}>
+                  ✎ Edit
+                </Link>
+              ) : (
+                <Link href={`/login?next=${encodeURIComponent(`/assets/edit/${asset.machine_asset_number}`)}`}
+                  style={{ ...S.btn, ...S.btnPrimary, textDecoration: 'none', textAlign: 'center' }}>
+                  Sign in to edit
+                </Link>
+              )}
             </div>
           </div>
         )}
@@ -225,6 +242,17 @@ const S = {
   btn: {
     padding: '12px 20px', borderRadius: 10, border: 'none',
     fontSize: 14, fontWeight: 500, cursor: 'pointer', flex: 1,
+    display: 'inline-block',
   },
+  btnPrimary: { background: '#0f172a', color: '#fff' },
   btnDisabled: { background: '#e2e8f0', color: '#94a3b8', cursor: 'not-allowed' },
+
+  userChip: {
+    background: '#22c55e', color: '#fff', borderRadius: 999,
+    padding: '4px 10px', fontSize: 12, fontWeight: 600,
+  },
+  loginLink: {
+    color: '#94a3b8', textDecoration: 'none', fontSize: 13,
+    padding: '6px 10px', border: '1px solid #334155', borderRadius: 6,
+  },
 };
