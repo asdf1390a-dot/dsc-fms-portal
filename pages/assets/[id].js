@@ -23,6 +23,7 @@ export default function AssetDetail() {
   const [category, setCategory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [bmEvents, setBmEvents] = useState([]);
 
   useEffect(() => {
     if (!id) return;
@@ -49,6 +50,13 @@ export default function AssetDetail() {
           .maybeSingle();
         setCategory(cat);
       }
+      // BM history for this asset (silently swallow if bm_events not yet created)
+      supabase.from('bm_events')
+        .select('id, severity, symptom, status, reported_at, resolved_at')
+        .eq('asset_id', data.id)
+        .order('reported_at', { ascending: false })
+        .limit(10)
+        .then(({ data: bm }) => { if (!cancelled) setBmEvents(bm || []); });
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -147,6 +155,42 @@ export default function AssetDetail() {
               <Field label="Created" value={asset.created_at ? new Date(asset.created_at).toLocaleString() : null} />
               <Field label="Updated" value={asset.updated_at ? new Date(asset.updated_at).toLocaleString() : null} />
               <Field label="QR" value={asset.qr_payload} />
+            </Section>
+
+            <Section title={`Breakdown History${bmEvents.length ? ` (${bmEvents.length})` : ''}`}>
+              {isAuthed && (
+                <Link
+                  href={`/bm/new?asset=${encodeURIComponent(asset.machine_asset_number)}`}
+                  style={S.bmReportBtn}
+                >
+                  🚨 Report Breakdown
+                </Link>
+              )}
+              {bmEvents.length > 0 ? (
+                <ul style={S.bmList}>
+                  {bmEvents.map(e => (
+                    <li key={e.id}>
+                      <Link href={`/bm/${e.id}`} style={S.bmItem}>
+                        <span style={{
+                          ...S.bmStatus,
+                          background: ['open', 'in_progress', 'pending_parts'].includes(e.status) ? '#fee2e2' : '#dcfce7',
+                          color: ['open', 'in_progress', 'pending_parts'].includes(e.status) ? '#991b1b' : '#166534',
+                        }}>
+                          {e.status === 'in_progress' ? 'WIP' : e.status.toUpperCase().slice(0, 6)}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: '#334155' }}>{e.symptom.slice(0, 60)}{e.symptom.length > 60 ? '…' : ''}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                            {new Date(e.reported_at).toLocaleDateString()} · {e.severity}
+                          </div>
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : !isAuthed ? (
+                <div style={{ fontSize: 13, color: '#94a3b8' }}>(none)</div>
+              ) : null}
             </Section>
 
             <div style={S.actions}>
@@ -262,5 +306,23 @@ const S = {
   loginLink: {
     color: '#94a3b8', textDecoration: 'none', fontSize: 13,
     padding: '6px 10px', border: '1px solid #334155', borderRadius: 6,
+  },
+
+  bmReportBtn: {
+    display: 'block', background: '#dc2626', color: '#fff',
+    padding: '12px', borderRadius: 10, textDecoration: 'none',
+    textAlign: 'center', fontSize: 14, fontWeight: 700,
+    marginBottom: 12,
+  },
+  bmList: { listStyle: 'none', margin: 0, padding: 0 },
+  bmItem: {
+    display: 'flex', gap: 12, alignItems: 'flex-start',
+    padding: '10px 0', textDecoration: 'none', color: 'inherit',
+    borderTop: '1px solid #f1f5f9',
+  },
+  bmStatus: {
+    fontSize: 10, fontWeight: 700,
+    padding: '3px 7px', borderRadius: 4,
+    minWidth: 48, textAlign: 'center', letterSpacing: 0.3,
   },
 };
