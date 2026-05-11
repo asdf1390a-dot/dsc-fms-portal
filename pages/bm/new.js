@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
+import BottomNav from '../../components/BottomNav';
 
 // ────────────────────────────────────────────────────────────────────────
 // i18n
@@ -21,6 +22,7 @@ const T = {
     selectDept: 'Select Department',
     selectType: 'Select Equipment Type',
     selectCar: 'Select Car Model',
+    selectProcess: 'Select Process Line',
     selectAsset: 'Select Asset',
     severity: 'Severity',
     low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
@@ -44,6 +46,7 @@ const T = {
     unassigned: '(Unassigned)',
     placeholderType: '— Select equipment type —',
     placeholderCar: '— Select car model —',
+    placeholderProcess: '— Select process line —',
     placeholderAsset: '— Select asset —',
   },
   ko: {
@@ -51,6 +54,7 @@ const T = {
     selectDept: '부서 선택',
     selectType: '설비 유형 선택',
     selectCar: '차종 선택',
+    selectProcess: '공정 선택',
     selectAsset: '자산 선택',
     severity: '심각도',
     low: '낮음', medium: '중간', high: '높음', critical: '위급',
@@ -74,6 +78,7 @@ const T = {
     unassigned: '(미지정)',
     placeholderType: '— 설비 유형 선택 —',
     placeholderCar: '— 차종 선택 —',
+    placeholderProcess: '— 공정 선택 —',
     placeholderAsset: '— 자산 선택 —',
   },
   ta: {
@@ -81,6 +86,7 @@ const T = {
     selectDept: 'பிரிவு தேர்வு',
     selectType: 'இயந்திர வகை தேர்வு',
     selectCar: 'கார் மாடல் தேர்வு',
+    selectProcess: 'செயல்முறை கோடு தேர்வு',
     selectAsset: 'சொத்து தேர்வு',
     severity: 'தீவிரம்',
     low: 'குறைவு', medium: 'நடுத்தரம்', high: 'அதிகம்', critical: 'அவசரம்',
@@ -104,6 +110,7 @@ const T = {
     unassigned: '(ஒதுக்கப்படவில்லை)',
     placeholderType: '— இயந்திர வகை தேர்வு —',
     placeholderCar: '— கார் மாடல் தேர்வு —',
+    placeholderProcess: '— செயல்முறை தேர்வு —',
     placeholderAsset: '— சொத்து தேர்வு —',
   },
   hi: {
@@ -111,6 +118,7 @@ const T = {
     selectDept: 'विभाग चुनें',
     selectType: 'उपकरण प्रकार चुनें',
     selectCar: 'कार मॉडल चुनें',
+    selectProcess: 'प्रक्रिया लाइन चुनें',
     selectAsset: 'संपत्ति चुनें',
     severity: 'गंभीरता',
     low: 'कम', medium: 'मध्यम', high: 'अधिक', critical: 'आपातकाल',
@@ -134,6 +142,7 @@ const T = {
     unassigned: '(अनिर्धारित)',
     placeholderType: '— उपकरण प्रकार चुनें —',
     placeholderCar: '— कार मॉडल चुनें —',
+    placeholderProcess: '— प्रक्रिया लाइन चुनें —',
     placeholderAsset: '— संपत्ति चुनें —',
   },
 };
@@ -180,7 +189,8 @@ export default function NewBMPage() {
   // Hierarchy selections
   const [dept, setDept] = useState('');               // 'machine' | 'mould' | 'jig'
   const [machineCat, setMachineCat] = useState('');   // category_code (e.g. '01','03','04')
-  const [carModel, setCarModel] = useState('');       // for mould/jig
+  const [carModel, setCarModel] = useState('');       // for mould/jig: model field
+  const [processLine, setProcessLine] = useState(''); // for mould/jig: extra.process field
   const [assetId, setAssetId] = useState('');
 
   // Other form state
@@ -288,16 +298,12 @@ export default function NewBMPage() {
       .map(c => ({ code: c.code, name_en: c.name_en }));
   }, [dept, deptAssets, categories]);
 
-  // For Mould/JIG: Step 2 = unique car model values
+  // For Mould/JIG: Step 2 = unique car model values (both use model field after DB restructure)
   const carModelOptions = useMemo(() => {
     if (dept !== 'mould' && dept !== 'jig') return [];
     const set = new Set();
     for (const a of deptAssets) {
-      // JIG uses extra.car; MOULD uses model field
-      const cm = dept === 'jig'
-        ? (a.extra && a.extra.car) || ''
-        : (a.model || '');
-      set.add((cm || '').trim() || '__UNASSIGNED__');
+      set.add((a.model || '').trim() || '__UNASSIGNED__');
     }
     const arr = Array.from(set);
     arr.sort((x, y) => {
@@ -308,27 +314,44 @@ export default function NewBMPage() {
     return arr;
   }, [dept, deptAssets]);
 
-  // Step 3 — filtered asset list
+  // For Mould/JIG: Step 3 = unique process lines for the selected car model
+  const processLineOptions = useMemo(() => {
+    if ((dept !== 'mould' && dept !== 'jig') || !carModel) return [];
+    const set = new Set();
+    for (const a of deptAssets) {
+      const cm = (a.model || '').trim() || '__UNASSIGNED__';
+      if (cm !== carModel) continue;
+      const proc = (a.extra && a.extra.process) || '';
+      if (proc) set.add(proc.trim());
+    }
+    const arr = Array.from(set).sort();
+    return arr;
+  }, [dept, deptAssets, carModel]);
+
+  // Step 4 — filtered asset list
   const finalAssets = useMemo(() => {
     if (!dept) return [];
     if (dept === 'machine') {
       if (!machineCat) return [];
       return deptAssets.filter(a => assetCategoryCode(a) === machineCat);
     }
-    // mould / jig
+    // mould / jig: filter by carModel AND processLine
     if (!carModel) return [];
     return deptAssets.filter(a => {
-      const cm = dept === 'jig'
-        ? (a.extra && a.extra.car) || ''
-        : (a.model || '');
-      const norm = (cm || '').trim() || '__UNASSIGNED__';
-      return norm === carModel;
+      const cm = (a.model || '').trim() || '__UNASSIGNED__';
+      if (cm !== carModel) return false;
+      if (processLine) {
+        const proc = (a.extra && a.extra.process) || '';
+        return proc.trim() === processLine;
+      }
+      return true;
     });
-  }, [dept, deptAssets, machineCat, carModel]);
+  }, [dept, deptAssets, machineCat, carModel, processLine]);
 
   // Reset downstream selections when an upstream changes
-  useEffect(() => { setMachineCat(''); setCarModel(''); setAssetId(''); }, [dept]);
-  useEffect(() => { setAssetId(''); }, [machineCat, carModel]);
+  useEffect(() => { setMachineCat(''); setCarModel(''); setProcessLine(''); setAssetId(''); }, [dept]);
+  useEffect(() => { setProcessLine(''); setAssetId(''); }, [carModel]);
+  useEffect(() => { setAssetId(''); }, [machineCat, processLine]);
 
   // Causes grouped
   const causesByGroup = useMemo(() => {
@@ -350,12 +373,16 @@ export default function NewBMPage() {
     const cat = assetCategoryCode(found);
     if (cat === '09') {
       setDept('jig');
-      const cm = ((found.extra && found.extra.car) || '').trim() || '__UNASSIGNED__';
+      const cm = (found.model || '').trim() || '__UNASSIGNED__';
       setCarModel(cm);
+      const proc = (found.extra && found.extra.process) || '';
+      if (proc) setProcessLine(proc.trim());
     } else if (cat === '10') {
       setDept('mould');
       const cm = (found.model || '').trim() || '__UNASSIGNED__';
       setCarModel(cm);
+      const proc = (found.extra && found.extra.process) || '';
+      if (proc) setProcessLine(proc.trim());
     } else {
       setDept('machine');
       setMachineCat(cat);
@@ -449,6 +476,26 @@ export default function NewBMPage() {
       }
 
       setProgressMsg('Done.');
+
+      // Fire-and-forget Discord notification
+      const selectedAsset = assets.find(a => a.id === assetId);
+      const assetLabel = selectedAsset
+        ? `${selectedAsset.machine_asset_number} — ${selectedAsset.name_en || ''}`.trim()
+        : '-';
+      fetch('/api/discord-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'bm_created',
+          title: symptom.trim().slice(0, 80) || '고장 신고',
+          fields: [
+            { name: '자산', value: assetLabel },
+            { name: '우선순위', value: severity || '-' },
+            { name: '원인', value: causeCode || '-' },
+          ],
+        }),
+      }).catch(() => {});
+
       try {
         await router.push('/bm');
       } catch {
@@ -567,28 +614,47 @@ export default function NewBMPage() {
               </Section>
             )}
 
-            {/* ── Step 3 — Asset ─────────────────────────────────── */}
-            {dept && (
-              (dept === 'machine' ? machineCat : carModel) ? (
-                <Section title={t.selectAsset + ' *'}>
-                  <select
-                    value={assetId}
-                    onChange={(e) => setAssetId(e.target.value)}
-                    style={S.input}
-                    disabled={loadingMaster}
-                    required
-                  >
-                    <option value="">{t.placeholderAsset}</option>
-                    {finalAssets.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.machine_asset_number} — {a.name_en}
-                        {a.location ? ` (${a.location})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </Section>
-              ) : null
+            {/* ── Step 3 — Process Line (Mould / JIG only) ──────── */}
+            {(dept === 'mould' || dept === 'jig') && carModel && processLineOptions.length > 0 && (
+              <Section title={t.selectProcess}>
+                <select
+                  value={processLine}
+                  onChange={(e) => setProcessLine(e.target.value)}
+                  style={S.input}
+                  disabled={loadingMaster}
+                >
+                  <option value="">{t.placeholderProcess}</option>
+                  {processLineOptions.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </Section>
             )}
+
+            {/* ── Step 4 — Asset ─────────────────────────────────── */}
+            {dept && (
+              dept === 'machine'
+                ? machineCat
+                : carModel
+            ) ? (
+              <Section title={t.selectAsset + ' *'}>
+                <select
+                  value={assetId}
+                  onChange={(e) => setAssetId(e.target.value)}
+                  style={S.input}
+                  disabled={loadingMaster}
+                  required
+                >
+                  <option value="">{t.placeholderAsset}</option>
+                  {finalAssets.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.machine_asset_number} — {a.name_en}
+                      {a.location ? ` (${a.location})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </Section>
+            ) : null}
 
             {/* ── Severity ───────────────────────────────────────── */}
             <Section title={t.severity + ' *'}>
@@ -744,6 +810,7 @@ export default function NewBMPage() {
           </form>
         )}
       </main>
+      <BottomNav />
     </>
   );
 }
@@ -769,7 +836,9 @@ function toLocalInput(d) {
 const S = {
   page: {
     fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Tamil", "Noto Sans Devanagari", "Noto Sans KR", sans-serif',
-    background: '#0b1220', minHeight: '100vh', color: '#e2e8f0', paddingBottom: 80,
+    background: '#0b1220', minHeight: '100vh', color: '#e2e8f0',
+    paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px) + 24px)',
+    maxWidth: 480, margin: '0 auto',
   },
   header: {
     position: 'sticky', top: 0, zIndex: 10,
@@ -788,7 +857,7 @@ const S = {
     background: 'rgba(0,0,0,0.25)', padding: 3, borderRadius: 8,
   },
   langBtn: {
-    padding: '6px 10px', minHeight: 32,
+    padding: '8px 10px', minHeight: 36, minWidth: 36,
     border: 'none', borderRadius: 6, cursor: 'pointer',
     background: 'transparent', color: 'rgba(255,255,255,0.75)',
     fontSize: 13, fontWeight: 600,

@@ -25,6 +25,9 @@ export default function AssetDetail() {
   const [error, setError] = useState(null);
   const [bmEvents, setBmEvents] = useState([]);
 
+  const baseUrl = 'https://dsc-fms-portal.vercel.app';
+  const qrUrl = `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${encodeURIComponent(`${baseUrl}/bm/new?asset=${asset?.machine_asset_number}`)}&choe=UTF-8`;
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -192,6 +195,18 @@ export default function AssetDetail() {
                 <div style={{ fontSize: 13, color: '#94a3b8' }}>(none)</div>
               ) : null}
             </Section>
+
+            <section style={{ margin: '16px 0 0', background: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>QR 코드</div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: 8 }}>
+                  <img src={qrUrl} alt="QR코드" width={160} height={160} style={{ display: 'block' }} />
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', textAlign: 'center' }}>
+                  이 QR을 스캔하면 BM 신고 폼으로 이동합니다
+                </div>
+              </div>
+            </section>
 
             <div style={S.actions}>
               {isAuthed ? (
