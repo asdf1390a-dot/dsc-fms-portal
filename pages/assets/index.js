@@ -156,32 +156,34 @@ export default function AssetsPage() {
         <ul style={S.list}>
           {filtered.map(a => (
             <li key={a.id} style={S.card}>
-              <div style={S.cardTop}>
-                <div style={S.tagBox}>
-                  <span style={S.tag}>{a.machine_asset_number}</span>
-                  <span style={S.tagSub}>{a.machine_asset_code}</span>
+              <Link href={`/assets/${encodeURIComponent(a.machine_asset_number)}`} style={S.cardLink}>
+                <div style={S.cardTop}>
+                  <div style={S.tagBox}>
+                    <span style={S.tag}>{a.machine_asset_number}</span>
+                    <span style={S.tagSub}>{a.machine_asset_code}</span>
+                  </div>
+                  <StatusBadge status={a.status} />
                 </div>
-                <StatusBadge status={a.status} />
-              </div>
 
-              <div style={S.name}>
-                {lang === 'ta' && a.name_ta ? a.name_ta : a.name_en}
-              </div>
-              {lang === 'ta' && a.name_ta && a.name_en !== a.name_ta && (
-                <div style={S.nameSub}>{a.name_en}</div>
-              )}
+                <div style={S.name}>
+                  {lang === 'ta' && a.name_ta ? a.name_ta : a.name_en}
+                </div>
+                {lang === 'ta' && a.name_ta && a.name_en !== a.name_ta && (
+                  <div style={S.nameSub}>{a.name_en}</div>
+                )}
 
-              <div style={S.meta}>
-                {a.make && <Meta label={t('make', lang)} value={a.make} />}
-                {a.model && <Meta label={t('model', lang)} value={a.model} />}
-                {a.serial_no && <Meta label={t('serial', lang)} value={a.serial_no} />}
-                {a.location && <Meta label={t('location', lang)} value={a.location} />}
-                <Meta
-                  label={t('category', lang)}
-                  value={classByCode.get(a.asset_class_code)?.name_en || a.asset_class_code}
-                />
-                {a.remark && <Meta label="—" value={a.remark} />}
-              </div>
+                <div style={S.meta}>
+                  {a.make && <Meta label={t('make', lang)} value={a.make} />}
+                  {a.model && <Meta label={t('model', lang)} value={a.model} />}
+                  {a.serial_no && <Meta label={t('serial', lang)} value={a.serial_no} />}
+                  {a.location && <Meta label={t('location', lang)} value={a.location} />}
+                  <Meta
+                    label={t('category', lang)}
+                    value={classByCode.get(a.asset_class_code)?.name_en || a.asset_class_code}
+                  />
+                  {a.remark && <Meta label="—" value={a.remark} />}
+                </div>
+              </Link>
             </li>
           ))}
         </ul>
@@ -286,8 +288,12 @@ const S = {
 
   list: { listStyle: 'none', margin: 0, padding: '12px 16px' },
   card: {
-    background: '#fff', borderRadius: 12, padding: 14,
+    background: '#fff', borderRadius: 12,
     marginBottom: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+    overflow: 'hidden',
+  },
+  cardLink: {
+    display: 'block', padding: 14, color: 'inherit', textDecoration: 'none',
   },
   cardTop: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
