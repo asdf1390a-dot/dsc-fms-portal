@@ -5,13 +5,148 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
 
-// Buttons shown to operator (English + Tamil).
-// Maps to bm_events.priority (exact) AND bm_events.severity (enum).
+// ────────────────────────────────────────────────────────────────────────
+// i18n
+// ────────────────────────────────────────────────────────────────────────
+const LOCALES = [
+  { code: 'en', label: 'EN' },
+  { code: 'ko', label: '한' },
+  { code: 'ta', label: 'தமிழ்' },
+  { code: 'hi', label: 'हिन्दी' },
+];
+
+const T = {
+  en: {
+    title: 'Breakdown Report',
+    selectDept: 'Select Department',
+    selectType: 'Select Equipment Type',
+    selectCar: 'Select Car Model',
+    selectAsset: 'Select Asset',
+    severity: 'Severity',
+    low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
+    sevHintLow: 'Minor issue', sevHintMed: 'Standard',
+    sevHintHigh: 'Partial stop', sevHintCrit: 'Line down',
+    symptom: 'Symptom (describe the problem)',
+    symptomTa: 'Symptom in Tamil (optional)',
+    breakdownTime: 'Breakdown Start Time',
+    causeCode: 'Fault Category',
+    causeUnknown: 'Unknown',
+    reporterName: 'Reported By',
+    attachPhoto: 'Attach Photo',
+    addAnother: '+ Add another',
+    submit: 'Submit Report',
+    submitting: 'Submitting…',
+    cancel: 'Cancel',
+    success: 'Breakdown Reported Successfully',
+    required: 'This field is required',
+    loading: 'Loading…',
+    deptMachine: 'Machine', deptMould: 'Mould', deptJig: 'JIG',
+    unassigned: '(Unassigned)',
+    placeholderType: '— Select equipment type —',
+    placeholderCar: '— Select car model —',
+    placeholderAsset: '— Select asset —',
+  },
+  ko: {
+    title: '고장 신고',
+    selectDept: '부서 선택',
+    selectType: '설비 유형 선택',
+    selectCar: '차종 선택',
+    selectAsset: '자산 선택',
+    severity: '심각도',
+    low: '낮음', medium: '중간', high: '높음', critical: '위급',
+    sevHintLow: '경미한 문제', sevHintMed: '일반',
+    sevHintHigh: '부분 정지', sevHintCrit: '라인 정지',
+    symptom: '고장 증상 (영어)',
+    symptomTa: '고장 증상 (타밀어, 선택)',
+    breakdownTime: '고장 발생 시각',
+    causeCode: '고장 원인 분류',
+    causeUnknown: '미상',
+    reporterName: '보고자 이름',
+    attachPhoto: '사진 첨부',
+    addAnother: '+ 추가',
+    submit: '제출',
+    submitting: '제출 중…',
+    cancel: '취소',
+    success: '고장 접수 완료',
+    required: '필수 항목입니다',
+    loading: '불러오는 중…',
+    deptMachine: '일반 설비', deptMould: '금형', deptJig: '지그',
+    unassigned: '(미지정)',
+    placeholderType: '— 설비 유형 선택 —',
+    placeholderCar: '— 차종 선택 —',
+    placeholderAsset: '— 자산 선택 —',
+  },
+  ta: {
+    title: 'கோளாறு அறிக்கை',
+    selectDept: 'பிரிவு தேர்வு',
+    selectType: 'இயந்திர வகை தேர்வு',
+    selectCar: 'கார் மாடல் தேர்வு',
+    selectAsset: 'சொத்து தேர்வு',
+    severity: 'தீவிரம்',
+    low: 'குறைவு', medium: 'நடுத்தரம்', high: 'அதிகம்', critical: 'அவசரம்',
+    sevHintLow: 'சிறிய பிரச்சனை', sevHintMed: 'சாதாரண',
+    sevHintHigh: 'பகுதி நிறுத்தம்', sevHintCrit: 'வரிசை நின்றது',
+    symptom: 'கோளாறு அறிகுறி',
+    symptomTa: 'தமிழில் அறிகுறி (விரும்பினால்)',
+    breakdownTime: 'கோளாறு நேரம்',
+    causeCode: 'கோளாறு வகை',
+    causeUnknown: 'தெரியவில்லை',
+    reporterName: 'புகாரளித்தவர்',
+    attachPhoto: 'புகைப்படம்',
+    addAnother: '+ மேலும் சேர்',
+    submit: 'சமர்ப்பிக்கவும்',
+    submitting: 'சமர்ப்பிக்கிறது…',
+    cancel: 'ரத்து',
+    success: 'கோளாறு பதிவு செய்யப்பட்டது',
+    required: 'இது கட்டாயமான புலம்',
+    loading: 'ஏற்றுகிறது…',
+    deptMachine: 'இயந்திரம்', deptMould: 'அச்சு', deptJig: 'ஜிக்',
+    unassigned: '(ஒதுக்கப்படவில்லை)',
+    placeholderType: '— இயந்திர வகை தேர்வு —',
+    placeholderCar: '— கார் மாடல் தேர்வு —',
+    placeholderAsset: '— சொத்து தேர்வு —',
+  },
+  hi: {
+    title: 'खराबी रिपोर्ट',
+    selectDept: 'विभाग चुनें',
+    selectType: 'उपकरण प्रकार चुनें',
+    selectCar: 'कार मॉडल चुनें',
+    selectAsset: 'संपत्ति चुनें',
+    severity: 'गंभीरता',
+    low: 'कम', medium: 'मध्यम', high: 'अधिक', critical: 'आपातकाल',
+    sevHintLow: 'छोटी समस्या', sevHintMed: 'सामान्य',
+    sevHintHigh: 'आंशिक रुकावट', sevHintCrit: 'लाइन बंद',
+    symptom: 'खराबी का विवरण',
+    symptomTa: 'तमिल में विवरण (वैकल्पिक)',
+    breakdownTime: 'खराबी का समय',
+    causeCode: 'खराबी का कारण',
+    causeUnknown: 'अज्ञात',
+    reporterName: 'रिपोर्टकर्ता का नाम',
+    attachPhoto: 'फ़ोटो संलग्न करें',
+    addAnother: '+ और जोड़ें',
+    submit: 'रिपोर्ट जमा करें',
+    submitting: 'जमा हो रहा है…',
+    cancel: 'रद्द करें',
+    success: 'खराबी सफलतापूर्वक दर्ज की गई',
+    required: 'यह फ़ील्ड आवश्यक है',
+    loading: 'लोड हो रहा है…',
+    deptMachine: 'मशीन', deptMould: 'मोल्ड', deptJig: 'जिग',
+    unassigned: '(अनिर्धारित)',
+    placeholderType: '— उपकरण प्रकार चुनें —',
+    placeholderCar: '— कार मॉडल चुनें —',
+    placeholderAsset: '— संपत्ति चुनें —',
+  },
+};
+
+// ────────────────────────────────────────────────────────────────────────
+// Severity → maps to bm_events.priority (low|medium|high|critical)
+// and bm_events.severity (minor|normal|major|line_down)
+// ────────────────────────────────────────────────────────────────────────
 const SEVERITIES = [
-  { v: 'low',      sev: 'minor',     en: 'Low',      ta: 'குறைவு',     hint_en: 'Minor issue', hint_ta: 'சிறிய பிரச்சனை' },
-  { v: 'medium',   sev: 'normal',    en: 'Medium',   ta: 'நடுத்தரம்',   hint_en: 'Standard',    hint_ta: 'சாதாரண' },
-  { v: 'high',     sev: 'major',     en: 'High',     ta: 'அதிகம்',      hint_en: 'Partial stop', hint_ta: 'பகுதி நிறுத்தம்' },
-  { v: 'critical', sev: 'line_down', en: 'Critical', ta: 'மிக அவசரம்', hint_en: 'Line down',   hint_ta: 'வரிசை நின்றது' },
+  { v: 'low',      sev: 'minor',     tKey: 'low',      hintKey: 'sevHintLow'  },
+  { v: 'medium',   sev: 'normal',    tKey: 'medium',   hintKey: 'sevHintMed'  },
+  { v: 'high',     sev: 'major',     tKey: 'high',     hintKey: 'sevHintHigh' },
+  { v: 'critical', sev: 'line_down', tKey: 'critical', hintKey: 'sevHintCrit' },
 ];
 
 const SEV_COLORS = {
@@ -23,50 +158,83 @@ const SEV_COLORS = {
 
 const PHOTO_BUCKET = 'bm-photos';
 
+// Excluded category codes for the "Machine" department: JIG, MOULD, IDLE, FA-sale, FA-disposal
+const MACHINE_EXCLUDED_CATS = new Set(['09', '10', '11', '11A', '12', '13']);
+
 export default function NewBMPage() {
   const router = useRouter();
   const { user, isAuthed, fullName, loading: authLoading } = useAuth();
   const fileInputRef = useRef();
 
+  // Locale
+  const [locale, setLocale] = useState('en');
+  const t = T[locale];
+
+  // Master data
+  const [categories, setCategories] = useState([]);   // categories table
+  const [assetClasses, setAssetClasses] = useState([]); // asset_classes table
   const [assets, setAssets] = useState([]);
   const [causes, setCauses] = useState([]);
   const [loadingMaster, setLoadingMaster] = useState(true);
 
+  // Hierarchy selections
+  const [dept, setDept] = useState('');               // 'machine' | 'mould' | 'jig'
+  const [machineCat, setMachineCat] = useState('');   // category_code (e.g. '01','03','04')
+  const [carModel, setCarModel] = useState('');       // for mould/jig
   const [assetId, setAssetId] = useState('');
+
+  // Other form state
   const [severity, setSeverity] = useState('medium');
   const [symptom, setSymptom] = useState('');
   const [symptomTa, setSymptomTa] = useState('');
   const [downtimeStart, setDowntimeStart] = useState(() => toLocalInput(new Date()));
   const [causeCode, setCauseCode] = useState('');
   const [reporterName, setReporterName] = useState('');
-  const [photoFiles, setPhotoFiles] = useState([]); // File[]
-  const [photoPreviews, setPhotoPreviews] = useState([]); // dataURL[]
+  const [photoFiles, setPhotoFiles] = useState([]);
+  const [photoPreviews, setPhotoPreviews] = useState([]);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [progressMsg, setProgressMsg] = useState('');
 
-  // Auth gate
+  // ── Auth gate ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!authLoading && !isAuthed) {
       router.replace(`/login?next=${encodeURIComponent('/bm/new')}`);
     }
   }, [authLoading, isAuthed, router]);
 
-  // Pre-fill reporter name from auth metadata
+  // ── Reporter prefill ──────────────────────────────────────────────
   useEffect(() => {
     if (fullName && !reporterName) setReporterName(fullName);
   }, [fullName]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load master data: assets + cause_codes
+  // ── Detect browser language ───────────────────────────────────────
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    const nav = (navigator.language || 'en').toLowerCase();
+    if (nav.startsWith('ko')) setLocale('ko');
+    else if (nav.startsWith('ta')) setLocale('ta');
+    else if (nav.startsWith('hi')) setLocale('hi');
+    else setLocale('en');
+  }, []);
+
+  // ── Load master data ──────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoadingMaster(true);
-      const [{ data: a, error: aErr }, { data: c, error: cErr }] = await Promise.all([
+      const [
+        { data: cats, error: catErr },
+        { data: cls, error: clsErr },
+        { data: a, error: aErr },
+        { data: c, error: cErr },
+      ] = await Promise.all([
+        supabase.from('categories').select('code, name_en').order('code'),
+        supabase.from('asset_classes').select('code, name_en, category_code').order('code'),
         supabase
           .from('assets')
-          .select('id, machine_asset_number, name_en, name_ta, location, status')
+          .select('id, machine_asset_number, name_en, name_ta, location, status, asset_class_code, model, extra')
           .order('machine_asset_number', { ascending: true }),
         supabase
           .from('cause_codes')
@@ -75,8 +243,12 @@ export default function NewBMPage() {
           .order('name_en', { ascending: true }),
       ]);
       if (cancelled) return;
-      if (aErr) setError(`Asset load: ${aErr.message}`);
-      if (cErr) setError(prev => prev || `Cause load: ${cErr.message}`);
+      if (catErr) setError(`Category load: ${catErr.message}`);
+      if (clsErr) setError(prev => prev || `Class load: ${clsErr.message}`);
+      if (aErr)   setError(prev => prev || `Asset load: ${aErr.message}`);
+      if (cErr)   setError(prev => prev || `Cause load: ${cErr.message}`);
+      setCategories(cats || []);
+      setAssetClasses(cls || []);
       setAssets(a || []);
       setCauses(c || []);
       setLoadingMaster(false);
@@ -84,15 +256,81 @@ export default function NewBMPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Pre-select asset from query (?asset=DCMI-XXXX)
-  useEffect(() => {
-    if (!router.query.asset || !assets.length) return;
-    const tag = String(router.query.asset);
-    const found = assets.find(x => x.machine_asset_number === tag);
-    if (found) setAssetId(found.id);
-  }, [router.query.asset, assets]);
+  // ── Helpers ───────────────────────────────────────────────────────
+  // Derive category_code from asset row (first 2 chars of asset_class_code,
+  // but "11A" needs handling — categories table has 11 vs 11A. Most assets
+  // use codes like 01.xxx so simple split works.)
+  const assetCategoryCode = (row) => {
+    const c = row.asset_class_code || '';
+    return c.split('.')[0] || '';
+  };
 
-  // Group causes by group_name for <optgroup>
+  // Department -> default asset universe
+  const deptAssets = useMemo(() => {
+    if (!dept) return [];
+    if (dept === 'mould') {
+      return assets.filter(a => (a.asset_class_code || '').startsWith('10.'));
+    }
+    if (dept === 'jig') {
+      return assets.filter(a => (a.asset_class_code || '').startsWith('09.'));
+    }
+    // machine: everything NOT in excluded categories
+    return assets.filter(a => !MACHINE_EXCLUDED_CATS.has(assetCategoryCode(a)));
+  }, [dept, assets]);
+
+  // For "Machine": Step 2 = list of category codes that actually have assets
+  const machineCategoryOptions = useMemo(() => {
+    if (dept !== 'machine') return [];
+    const used = new Set();
+    for (const a of deptAssets) used.add(assetCategoryCode(a));
+    return categories
+      .filter(c => used.has(c.code))
+      .map(c => ({ code: c.code, name_en: c.name_en }));
+  }, [dept, deptAssets, categories]);
+
+  // For Mould/JIG: Step 2 = unique car model values
+  const carModelOptions = useMemo(() => {
+    if (dept !== 'mould' && dept !== 'jig') return [];
+    const set = new Set();
+    for (const a of deptAssets) {
+      // JIG uses extra.car; MOULD uses model field
+      const cm = dept === 'jig'
+        ? (a.extra && a.extra.car) || ''
+        : (a.model || '');
+      set.add((cm || '').trim() || '__UNASSIGNED__');
+    }
+    const arr = Array.from(set);
+    arr.sort((x, y) => {
+      if (x === '__UNASSIGNED__') return 1;
+      if (y === '__UNASSIGNED__') return -1;
+      return x.localeCompare(y);
+    });
+    return arr;
+  }, [dept, deptAssets]);
+
+  // Step 3 — filtered asset list
+  const finalAssets = useMemo(() => {
+    if (!dept) return [];
+    if (dept === 'machine') {
+      if (!machineCat) return [];
+      return deptAssets.filter(a => assetCategoryCode(a) === machineCat);
+    }
+    // mould / jig
+    if (!carModel) return [];
+    return deptAssets.filter(a => {
+      const cm = dept === 'jig'
+        ? (a.extra && a.extra.car) || ''
+        : (a.model || '');
+      const norm = (cm || '').trim() || '__UNASSIGNED__';
+      return norm === carModel;
+    });
+  }, [dept, deptAssets, machineCat, carModel]);
+
+  // Reset downstream selections when an upstream changes
+  useEffect(() => { setMachineCat(''); setCarModel(''); setAssetId(''); }, [dept]);
+  useEffect(() => { setAssetId(''); }, [machineCat, carModel]);
+
+  // Causes grouped
   const causesByGroup = useMemo(() => {
     const m = new Map();
     for (const c of causes) {
@@ -103,6 +341,32 @@ export default function NewBMPage() {
     return Array.from(m.entries());
   }, [causes]);
 
+  // ── Pre-select from ?asset=DCMI-XXX ────────────────────────────────
+  useEffect(() => {
+    if (!router.query.asset || !assets.length) return;
+    const tag = String(router.query.asset);
+    const found = assets.find(x => x.machine_asset_number === tag);
+    if (!found) return;
+    const cat = assetCategoryCode(found);
+    if (cat === '09') {
+      setDept('jig');
+      const cm = ((found.extra && found.extra.car) || '').trim() || '__UNASSIGNED__';
+      setCarModel(cm);
+    } else if (cat === '10') {
+      setDept('mould');
+      const cm = (found.model || '').trim() || '__UNASSIGNED__';
+      setCarModel(cm);
+    } else {
+      setDept('machine');
+      setMachineCat(cat);
+    }
+    // assetId is set after lists materialise via the chain above;
+    // setting it directly here works because deptAssets/finalAssets
+    // recompute on the same tick.
+    setAssetId(found.id);
+  }, [router.query.asset, assets]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Photo handling ────────────────────────────────────────────────
   function onPickFiles(e) {
     const files = Array.from(e.target.files || []).filter(f => /^image\//.test(f.type));
     if (!files.length) return;
@@ -114,12 +378,10 @@ export default function NewBMPage() {
     });
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
-
   function removePhoto(idx) {
     setPhotoFiles(prev => prev.filter((_, i) => i !== idx));
     setPhotoPreviews(prev => prev.filter((_, i) => i !== idx));
   }
-
   async function uploadPhotos(eventId) {
     if (!photoFiles.length) return [];
     const urls = [];
@@ -133,7 +395,6 @@ export default function NewBMPage() {
         .from(PHOTO_BUCKET)
         .upload(key, f, { contentType: f.type, upsert: false });
       if (upErr) {
-        // Bucket may not exist — skip silently per spec but log
         console.warn(`[bm-photos] upload failed: ${upErr.message}`);
         continue;
       }
@@ -143,19 +404,19 @@ export default function NewBMPage() {
     return urls;
   }
 
+  // ── Submit ────────────────────────────────────────────────────────
   async function submit(e) {
     e.preventDefault();
     setError(null);
-    if (!assetId)        { setError('Select an equipment / உபகரணம் தேர்வு செய்க'); return; }
-    if (!symptom.trim()) { setError('Describe the symptom / பிரச்சனையை விவரிக்கவும்'); return; }
-    if (!reporterName.trim()) { setError('Enter your name / உங்கள் பெயரை உள்ளிடவும்'); return; }
+    if (!assetId)             { setError(t.required + ': ' + t.selectAsset); return; }
+    if (!symptom.trim())      { setError(t.required + ': ' + t.symptom);     return; }
+    if (!reporterName.trim()) { setError(t.required + ': ' + t.reporterName); return; }
 
     const sevDef = SEVERITIES.find(s => s.v === severity) || SEVERITIES[1];
 
     setBusy(true);
     setProgressMsg('Creating report…');
     try {
-      // 1) Insert bm_event row first (without photos)
       const payload = {
         asset_id: assetId,
         reported_at: new Date().toISOString(),
@@ -177,7 +438,6 @@ export default function NewBMPage() {
         .single();
       if (insErr) throw insErr;
 
-      // 2) Upload photos (best effort), then patch row
       const urls = await uploadPhotos(ev.id);
       if (urls.length) {
         setProgressMsg('Saving photo links…');
@@ -189,11 +449,10 @@ export default function NewBMPage() {
       }
 
       setProgressMsg('Done.');
-      // 3) Redirect (or alert if /bm doesn't exist)
       try {
         await router.push('/bm');
       } catch {
-        alert('Breakdown reported successfully.');
+        alert(t.success);
       }
     } catch (err) {
       setError(err.message || String(err));
@@ -202,21 +461,38 @@ export default function NewBMPage() {
     }
   }
 
-  const submitDisabled = busy || loadingMaster || !assetId || !symptom.trim() || !reporterName.trim();
+  const submitDisabled =
+    busy || loadingMaster || !assetId || !symptom.trim() || !reporterName.trim();
 
+  // ────────────────────────────────────────────────────────────────────
   return (
     <>
       <Head>
-        <title>Report Breakdown | DSC FMS</title>
+        <title>{t.title} | DSC FMS</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
         <meta name="theme-color" content="#0f172a" />
       </Head>
       <main style={S.page}>
         <header style={S.header}>
           <Link href="/bm" style={S.backLink}>← BM</Link>
-          <div style={{ flex: 1 }}>
-            <h1 style={S.title}>Report Breakdown</h1>
-            <div style={S.titleTa}>முறிவு புகாரளி</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={S.title}>{t.title}</h1>
+          </div>
+          <div style={S.langWrap}>
+            {LOCALES.map(L => (
+              <button
+                key={L.code}
+                type="button"
+                onClick={() => setLocale(L.code)}
+                style={{
+                  ...S.langBtn,
+                  ...(locale === L.code ? S.langBtnActive : null),
+                }}
+                aria-pressed={locale === L.code}
+              >
+                {L.label}
+              </button>
+            ))}
           </div>
         </header>
 
@@ -224,28 +500,98 @@ export default function NewBMPage() {
           <div style={S.loading}>…</div>
         ) : (
           <form onSubmit={submit} style={S.form}>
-            {/* ───────── Equipment ───────── */}
-            <Section en="Equipment *" ta="உபகரணம் *">
-              <select
-                value={assetId}
-                onChange={(e) => setAssetId(e.target.value)}
-                style={S.input}
-                disabled={loadingMaster}
-                required
-              >
-                <option value="">
-                  {loadingMaster ? 'Loading…' : '— Select equipment / தேர்வு செய்க —'}
-                </option>
-                {assets.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.machine_asset_number} — {a.name_en}{a.location ? ` (${a.location})` : ''}
-                  </option>
-                ))}
-              </select>
+            {/* ── Step 1 — Department ────────────────────────────── */}
+            <Section title={t.selectDept}>
+              <div style={S.deptGrid}>
+                {[
+                  { v: 'machine', label: t.deptMachine, color: '#2563eb' },
+                  { v: 'mould',   label: t.deptMould,   color: '#7c3aed' },
+                  { v: 'jig',     label: t.deptJig,     color: '#0d9488' },
+                ].map(d => {
+                  const active = dept === d.v;
+                  return (
+                    <button
+                      key={d.v}
+                      type="button"
+                      onClick={() => setDept(d.v)}
+                      style={{
+                        ...S.deptBtn,
+                        borderColor: active ? d.color : '#334155',
+                        background: active ? d.color : '#0b1220',
+                        color: active ? '#fff' : '#cbd5e1',
+                      }}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
             </Section>
 
-            {/* ───────── Severity / Priority ───────── */}
-            <Section en="Severity *" ta="தீவிரம் *">
+            {/* ── Step 2 — Type / Car Model ──────────────────────── */}
+            {dept === 'machine' && (
+              <Section title={t.selectType}>
+                <select
+                  value={machineCat}
+                  onChange={(e) => setMachineCat(e.target.value)}
+                  style={S.input}
+                  disabled={loadingMaster}
+                  required
+                >
+                  <option value="">{loadingMaster ? t.loading : t.placeholderType}</option>
+                  {machineCategoryOptions.map(c => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} — {c.name_en}
+                    </option>
+                  ))}
+                </select>
+              </Section>
+            )}
+
+            {(dept === 'mould' || dept === 'jig') && (
+              <Section title={t.selectCar}>
+                <select
+                  value={carModel}
+                  onChange={(e) => setCarModel(e.target.value)}
+                  style={S.input}
+                  disabled={loadingMaster}
+                  required
+                >
+                  <option value="">{loadingMaster ? t.loading : t.placeholderCar}</option>
+                  {carModelOptions.map(cm => (
+                    <option key={cm} value={cm}>
+                      {cm === '__UNASSIGNED__' ? t.unassigned : cm}
+                    </option>
+                  ))}
+                </select>
+              </Section>
+            )}
+
+            {/* ── Step 3 — Asset ─────────────────────────────────── */}
+            {dept && (
+              (dept === 'machine' ? machineCat : carModel) ? (
+                <Section title={t.selectAsset + ' *'}>
+                  <select
+                    value={assetId}
+                    onChange={(e) => setAssetId(e.target.value)}
+                    style={S.input}
+                    disabled={loadingMaster}
+                    required
+                  >
+                    <option value="">{t.placeholderAsset}</option>
+                    {finalAssets.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.machine_asset_number} — {a.name_en}
+                        {a.location ? ` (${a.location})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </Section>
+              ) : null
+            )}
+
+            {/* ── Severity ───────────────────────────────────────── */}
+            <Section title={t.severity + ' *'}>
               <div style={S.sevGrid}>
                 {SEVERITIES.map(s => {
                   const active = severity === s.v;
@@ -262,10 +608,9 @@ export default function NewBMPage() {
                         color: '#fff',
                       }}
                     >
-                      <div style={{ fontWeight: 800, fontSize: 15 }}>{s.en}</div>
-                      <div style={{ fontSize: 13, opacity: 0.95 }}>{s.ta}</div>
-                      <div style={{ fontSize: 10, opacity: 0.75, marginTop: 4 }}>
-                        {s.hint_en} · {s.hint_ta}
+                      <div style={{ fontWeight: 800, fontSize: 15 }}>{t[s.tKey]}</div>
+                      <div style={{ fontSize: 11, opacity: 0.85, marginTop: 4 }}>
+                        {t[s.hintKey]}
                       </div>
                     </button>
                   );
@@ -273,29 +618,29 @@ export default function NewBMPage() {
               </div>
             </Section>
 
-            {/* ───────── Symptom EN ───────── */}
-            <Section en="Symptom (English) *" ta="அறிகுறி (ஆங்கிலம்) *">
+            {/* ── Symptom (EN) ───────────────────────────────────── */}
+            <Section title={t.symptom + ' *'}>
               <textarea
                 value={symptom}
                 onChange={(e) => setSymptom(e.target.value)}
-                placeholder="What is wrong? Sound / smell / error code?"
+                placeholder="Sound / smell / error code?"
                 style={{ ...S.input, height: 110, fontFamily: 'inherit', resize: 'vertical' }}
                 required
               />
             </Section>
 
-            {/* ───────── Symptom TA ───────── */}
-            <Section en="Symptom (Tamil)" ta="அறிகுறி (தமிழ்)">
+            {/* ── Symptom (TA) ───────────────────────────────────── */}
+            <Section title={t.symptomTa}>
               <textarea
                 value={symptomTa}
                 onChange={(e) => setSymptomTa(e.target.value)}
-                placeholder="என்ன பிரச்சனை? சத்தம் / வாசனை / பிழை குறியீடு?"
+                placeholder="தமிழில் சிக்கல் விவரம்"
                 style={{ ...S.input, height: 90, fontFamily: 'inherit', resize: 'vertical' }}
               />
             </Section>
 
-            {/* ───────── Downtime start ───────── */}
-            <Section en="Downtime Start" ta="நிறுத்தம் தொடங்கியது">
+            {/* ── Downtime start ─────────────────────────────────── */}
+            <Section title={t.breakdownTime}>
               <input
                 type="datetime-local"
                 value={downtimeStart}
@@ -304,15 +649,15 @@ export default function NewBMPage() {
               />
             </Section>
 
-            {/* ───────── Cause code ───────── */}
-            <Section en="Cause" ta="காரணம்">
+            {/* ── Cause code ─────────────────────────────────────── */}
+            <Section title={t.causeCode}>
               <select
                 value={causeCode}
                 onChange={(e) => setCauseCode(e.target.value)}
                 style={S.input}
                 disabled={loadingMaster}
               >
-                <option value="">— Unknown / தெரியவில்லை —</option>
+                <option value="">— {t.causeUnknown} —</option>
                 {causesByGroup.map(([group, list]) => (
                   <optgroup key={group} label={group}>
                     {list.map(c => (
@@ -325,20 +670,20 @@ export default function NewBMPage() {
               </select>
             </Section>
 
-            {/* ───────── Reporter ───────── */}
-            <Section en="Reporter Name *" ta="புகாரளிப்பவர் பெயர் *">
+            {/* ── Reporter ───────────────────────────────────────── */}
+            <Section title={t.reporterName + ' *'}>
               <input
                 type="text"
                 value={reporterName}
                 onChange={(e) => setReporterName(e.target.value)}
-                placeholder="Your name / உங்கள் பெயர்"
+                placeholder={t.reporterName}
                 style={S.input}
                 required
               />
             </Section>
 
-            {/* ───────── Photos ───────── */}
-            <Section en="Photos" ta="புகைப்படங்கள்">
+            {/* ── Photos ─────────────────────────────────────────── */}
+            <Section title={t.attachPhoto}>
               {photoPreviews.length > 0 && (
                 <div style={S.photoGrid}>
                   {photoPreviews.map((src, i) => (
@@ -368,9 +713,7 @@ export default function NewBMPage() {
                 onClick={() => fileInputRef.current?.click()}
                 style={S.photoAdd}
               >
-                {photoPreviews.length === 0
-                  ? 'Add photo / புகைப்படம் சேர்'
-                  : '+ Add another / மேலும் சேர்'}
+                {photoPreviews.length === 0 ? t.attachPhoto : t.addAnother}
               </button>
             </Section>
 
@@ -384,7 +727,7 @@ export default function NewBMPage() {
                 style={{ ...S.btn, ...S.btnSecondary }}
                 disabled={busy}
               >
-                Cancel / ரத்து
+                {t.cancel}
               </button>
               <button
                 type="submit"
@@ -395,7 +738,7 @@ export default function NewBMPage() {
                   ...(submitDisabled ? S.btnDisabled : null),
                 }}
               >
-                {busy ? 'Submitting…' : 'Report / புகாரளி'}
+                {busy ? t.submitting : t.submit}
               </button>
             </div>
           </form>
@@ -405,13 +748,10 @@ export default function NewBMPage() {
   );
 }
 
-function Section({ en, ta, children }) {
+function Section({ title, children }) {
   return (
     <section style={S.section}>
-      <div style={S.sectionTitle}>
-        <span>{en}</span>
-        {ta && <span style={S.sectionTitleTa}>{ta}</span>}
-      </div>
+      <div style={S.sectionTitle}>{title}</div>
       <div style={S.sectionBody}>{children}</div>
     </section>
   );
@@ -423,23 +763,39 @@ function toLocalInput(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// Styles
+// ────────────────────────────────────────────────────────────────────────
 const S = {
   page: {
-    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Tamil", sans-serif',
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Tamil", "Noto Sans Devanagari", "Noto Sans KR", sans-serif',
     background: '#0b1220', minHeight: '100vh', color: '#e2e8f0', paddingBottom: 80,
   },
   header: {
     position: 'sticky', top: 0, zIndex: 10,
-    background: '#7f1d1d', color: '#fff', padding: '12px 16px',
-    display: 'flex', alignItems: 'center', gap: 12,
+    background: '#7f1d1d', color: '#fff', padding: '10px 12px',
+    display: 'flex', alignItems: 'center', gap: 10,
     boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
+    flexWrap: 'wrap',
   },
   backLink: {
     color: 'rgba(255,255,255,0.85)', textDecoration: 'none', fontSize: 14,
     padding: '8px 4px',
   },
-  title: { fontSize: 18, fontWeight: 700, margin: 0, lineHeight: 1.1 },
-  titleTa: { fontSize: 12, opacity: 0.85, marginTop: 2 },
+  title: { fontSize: 17, fontWeight: 700, margin: 0, lineHeight: 1.1 },
+  langWrap: {
+    display: 'flex', gap: 4,
+    background: 'rgba(0,0,0,0.25)', padding: 3, borderRadius: 8,
+  },
+  langBtn: {
+    padding: '6px 10px', minHeight: 32,
+    border: 'none', borderRadius: 6, cursor: 'pointer',
+    background: 'transparent', color: 'rgba(255,255,255,0.75)',
+    fontSize: 13, fontWeight: 600,
+  },
+  langBtnActive: {
+    background: '#fff', color: '#7f1d1d',
+  },
   loading: { padding: 32, textAlign: 'center', color: '#94a3b8' },
   form: { padding: 12 },
   section: {
@@ -450,11 +806,6 @@ const S = {
     padding: '10px 14px', fontSize: 12, fontWeight: 700,
     color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5,
     background: '#0f172a', borderBottom: '1px solid #1f2937',
-    display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline',
-  },
-  sectionTitleTa: {
-    fontSize: 11, color: '#cbd5e1', textTransform: 'none', letterSpacing: 0,
-    fontWeight: 500,
   },
   sectionBody: { padding: 12 },
   input: {
@@ -464,11 +815,19 @@ const S = {
     background: '#0b1220', color: '#f1f5f9',
     minHeight: 44,
   },
+  deptGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8,
+  },
+  deptBtn: {
+    padding: '14px 6px', borderRadius: 10, border: '2px solid',
+    cursor: 'pointer', fontSize: 14, fontWeight: 700,
+    minHeight: 56,
+  },
   sevGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
   sevBtn: {
     padding: '12px 10px', borderRadius: 10, border: '2px solid',
     textAlign: 'left', cursor: 'pointer',
-    minHeight: 72,
+    minHeight: 64,
   },
   photoGrid: {
     display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10,
