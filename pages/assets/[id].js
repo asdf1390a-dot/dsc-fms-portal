@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
+import PhotoUploader from '../../components/PhotoUploader';
 
 const STATUS_STYLES = {
   active:      { bg: '#dcfce7', fg: '#166534', label: 'ACTIVE' },
@@ -92,15 +93,22 @@ export default function AssetDetail() {
               {asset.name_ta && <div style={S.nameSub}>{asset.name_ta}</div>}
             </Section>
 
-            {asset.photos?.length > 0 && (
-              <Section title={`Photos (${asset.photos.length})`}>
-                <div style={S.photoGrid}>
-                  {asset.photos.map((p, i) => (
-                    <a key={i} href={p} target="_blank" rel="noopener">
-                      <img src={p} alt={`photo ${i + 1}`} style={S.photo} />
-                    </a>
-                  ))}
-                </div>
+            {(asset.photos?.length > 0 || isAuthed) && (
+              <Section title={`Photos${asset.photos?.length ? ` (${asset.photos.length})` : ''}`}>
+                {isAuthed ? (
+                  <PhotoUploader
+                    asset={asset}
+                    onPhotosChange={(newPhotos) => setAsset(a => ({ ...a, photos: newPhotos }))}
+                  />
+                ) : (
+                  <div style={S.photoGrid}>
+                    {(asset.photos || []).map((p, i) => (
+                      <a key={i} href={p} target="_blank" rel="noopener">
+                        <img src={p} alt={`photo ${i + 1}`} style={S.photo} />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </Section>
             )}
 
