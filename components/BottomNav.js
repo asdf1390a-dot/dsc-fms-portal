@@ -7,6 +7,7 @@ const ITEMS = [
   { href: '/',          label: 'Home',  match: (p) => p === '/',                                  icon: HomeIcon },
   { href: '/bm',        label: 'BM',    match: (p) => p === '/bm' || p.startsWith('/bm/'),         icon: WrenchIcon },
   { href: '/pm',        label: 'PM',    match: (p) => p === '/pm' || p.startsWith('/pm/'),         icon: ClipboardIcon },
+  { href: '/disposals', label: '자산',  match: (p) => p === '/disposals' || p.startsWith('/disposals/'), icon: FactoryIcon },
   { href: '/kpi',       label: 'KPI',   match: (p) => p === '/kpi' || p.startsWith('/kpi/'),         icon: ChartIcon },
   { href: '/login',     label: '내정보', match: (p) => p === '/login' || p === '/profile',           icon: UserIcon },
 ];
@@ -80,6 +81,15 @@ function ChartIcon() {
     </svg>
   );
 }
+function FactoryIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 21V10l5 3V10l5 3V7l8-3v17H3z" />
+      <path d="M9 17h2M14 17h2M19 17h0" />
+    </svg>
+  );
+}
+
 function UserIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -98,7 +108,7 @@ const S = {
     boxShadow: '0 -4px 12px rgba(0,0,0,0.4)',
   },
   inner: {
-    display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
+    display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)',
     height: 60, maxWidth: 480, margin: '0 auto',
   },
   item: {
