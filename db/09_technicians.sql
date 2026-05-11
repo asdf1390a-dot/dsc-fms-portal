@@ -4,7 +4,9 @@
 -- 총 27명 (주재원 1 / 정규직 23 / 계약직 3)
 -- ====================================================
 
-CREATE TABLE IF NOT EXISTS technicians (
+DROP TABLE IF EXISTS technicians CASCADE;
+
+CREATE TABLE technicians (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   name        text        NOT NULL,
   name_en     text,

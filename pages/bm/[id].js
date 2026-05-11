@@ -4,7 +4,9 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
+import BottomNav from '../../components/BottomNav';
 
+// ── Status flow & labels ────────────────────────────────────────────
 const STATUS_FLOW = {
   open:          ['in_progress', 'pending_parts', 'resolved', 'wontfix'],
   in_progress:   ['pending_parts', 'resolved', 'open'],
@@ -16,13 +18,29 @@ const STATUS_LABEL = {
   open: 'Open', in_progress: 'In Progress', pending_parts: 'Wait Parts',
   resolved: 'Resolved', wontfix: "Won't Fix",
 };
-const STATUS_STYLES = {
-  open:          { bg: '#fee2e2', fg: '#991b1b' },
-  in_progress:   { bg: '#fef3c7', fg: '#92400e' },
-  pending_parts: { bg: '#fde68a', fg: '#7c2d12' },
-  resolved:      { bg: '#dcfce7', fg: '#166534' },
-  wontfix:       { bg: '#e5e7eb', fg: '#374151' },
+const STATUS_PILL = {
+  open:          { bg: 'rgba(220,38,38,0.18)',  fg: '#fca5a5', border: 'rgba(220,38,38,0.6)' },
+  in_progress:   { bg: 'rgba(249,115,22,0.18)', fg: '#fdba74', border: 'rgba(249,115,22,0.6)' },
+  pending_parts: { bg: 'rgba(234,179,8,0.18)',  fg: '#fde68a', border: 'rgba(234,179,8,0.6)' },
+  resolved:      { bg: 'rgba(34,197,94,0.18)',  fg: '#86efac', border: 'rgba(34,197,94,0.6)' },
+  wontfix:       { bg: 'rgba(100,116,139,0.2)', fg: '#cbd5e1', border: 'rgba(100,116,139,0.6)' },
 };
+
+// ── Severity → priority bar colour ─────────────────────────────────
+const SEVERITY_LABEL = {
+  line_down: 'LINE DOWN', major: 'MAJOR', normal: 'NORMAL', minor: 'MINOR',
+};
+const SEVERITY_BAR = {
+  line_down: '#dc2626', major: '#f97316', normal: '#2563eb', minor: '#64748b',
+};
+
+function formatDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export default function BMDetailPage() {
   const router = useRouter();
@@ -34,6 +52,8 @@ export default function BMDetailPage() {
   const [action, setAction] = useState('');
   const [cause, setCause] = useState('');
   const [busy, setBusy] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -64,11 +84,15 @@ export default function BMDetailPage() {
         patch.resolved_by = user?.id;
         patch.resolver_name = fullName || user?.email;
       }
-      const { data, error } = await supabase.from('bm_events').update(patch).eq('id', event.id).select().single();
+      const { data, error } = await supabase.from('bm_events')
+        .update(patch).eq('id', event.id).select().single();
       if (error) throw error;
       setEvent(prev => ({ ...prev, ...data, assets: prev.assets }));
-    } catch (err) { setError(err.message); }
-    finally { setBusy(false); }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveNotes() {
@@ -80,108 +104,293 @@ export default function BMDetailPage() {
         action_taken: action, cause,
       }).eq('id', event.id);
       if (error) throw error;
-    } catch (err) { setError(err.message); }
-    finally { setBusy(false); }
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2200);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const st = event ? STATUS_STYLES[event.status] : null;
+  async function resolveNow() {
+    // One-tap "수리 완료 처리" — saves notes then flips status to resolved.
+    if (!event) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const patch = {
+        action_taken: action,
+        cause,
+        status: 'resolved',
+        resolved_at: new Date().toISOString(),
+        resolved_by: user?.id || null,
+        resolver_name: fullName || user?.email || null,
+      };
+      const { data, error } = await supabase.from('bm_events')
+        .update(patch).eq('id', event.id).select().single();
+      if (error) throw error;
+      setEvent(prev => ({ ...prev, ...data, assets: prev.assets }));
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2200);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const st = event ? STATUS_PILL[event.status] : null;
   const nextStatuses = event ? (STATUS_FLOW[event.status] || []) : [];
+  const photos = Array.isArray(event?.photos) ? event.photos : [];
+  const barColor = event ? (SEVERITY_BAR[event.severity] || SEVERITY_BAR.normal) : null;
 
   return (
     <>
       <Head>
         <title>{event ? `BM #${String(event.id).slice(0, 6)}` : 'BM'} | DSC FMS</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <meta name="theme-color" content="#0f172a" />
       </Head>
       <main style={S.page}>
+        {/* ── Sticky header ───────────────────────────────────────── */}
         <header style={S.header}>
-          <Link href="/bm" style={S.backLink}>← BM</Link>
-          <h1 style={S.title}>BM Event</h1>
+          <Link href="/bm" style={S.backLink} aria-label="Back to list">← BM</Link>
+          <div style={S.headerTitleWrap}>
+            <div style={S.headerTitle}>
+              {event?.assets?.machine_asset_number || 'BM Event'}
+            </div>
+            {event?.assets?.name_en && (
+              <div style={S.headerSubtitle}>{event.assets.name_en}</div>
+            )}
+          </div>
+          <div style={{ width: 44 }} />
         </header>
 
-        {loading && <div style={S.loading}>Loading…</div>}
-        {error && <div style={S.error}>{error}</div>}
+        {loading && <div style={S.loading}>불러오는 중…</div>}
+
+        {error && (
+          <div style={S.errorBox}>{error}</div>
+        )}
 
         {event && (
           <div style={S.content}>
-            <div style={S.statusCard}>
-              <span style={{ ...S.statusBadge, background: st.bg, color: st.fg }}>
-                {STATUS_LABEL[event.status]}
-              </span>
-              <span style={S.severity}>{event.severity.toUpperCase()}</span>
+            {/* ── Status / severity hero card ────────────────────── */}
+            <div style={S.heroCard}>
+              <span style={{ ...S.heroBar, background: barColor }} aria-hidden="true" />
+              <div style={S.heroBody}>
+                <div style={S.heroPillRow}>
+                  <span style={{
+                    ...S.statusPill,
+                    background: st?.bg, color: st?.fg, borderColor: st?.border,
+                  }}>
+                    {STATUS_LABEL[event.status] || event.status}
+                  </span>
+                  <span style={S.severityPill}>
+                    {SEVERITY_LABEL[event.severity] || event.severity?.toUpperCase()}
+                  </span>
+                </div>
+                <div style={S.heroId}>BM #{String(event.id).slice(0, 8)}</div>
+              </div>
             </div>
 
-            <Section title="Asset">
-              <Link href={`/assets/${encodeURIComponent(event.assets?.machine_asset_number || '')}`} style={S.assetLink}>
-                <strong>{event.assets?.machine_asset_number}</strong>
-                <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{event.assets?.name_en}</div>
-                {event.assets?.location && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{event.assets?.location}</div>}
+            {/* ── Asset link ─────────────────────────────────────── */}
+            <Section title="Asset / 설비">
+              <Link
+                href={`/assets/${encodeURIComponent(event.assets?.machine_asset_number || '')}`}
+                style={S.assetLink}
+              >
+                <div style={S.assetTag}>{event.assets?.machine_asset_number}</div>
+                {event.assets?.name_en && (
+                  <div style={S.assetName}>{event.assets.name_en}</div>
+                )}
+                {event.assets?.location && (
+                  <div style={S.assetLoc}>📍 {event.assets.location}</div>
+                )}
+                <div style={S.assetArrow}>→</div>
               </Link>
             </Section>
 
-            <Section title="Symptom">
+            {/* ── Symptom ────────────────────────────────────────── */}
+            <Section title="Symptom / 증상">
               <div style={S.text}>{event.symptom}</div>
-            </Section>
-
-            <Section title="Action Taken">
-              {isAuthed ? (
-                <>
-                  <textarea value={action} onChange={(e) => setAction(e.target.value)}
-                    placeholder="What did you do?"
-                    style={{ ...S.input, height: 90, resize: 'vertical', fontFamily: 'inherit' }} />
-                </>
-              ) : (
-                <div style={S.text}>{event.action_taken || <em style={{color:'#94a3b8'}}>(none)</em>}</div>
+              {event.symptom_ta && (
+                <div style={{ ...S.text, marginTop: 8, color: '#94a3b8', fontStyle: 'italic' }}>
+                  {event.symptom_ta}
+                </div>
               )}
             </Section>
 
-            <Section title="Root Cause">
-              {isAuthed ? (
-                <textarea value={cause} onChange={(e) => setCause(e.target.value)}
-                  placeholder="Why did it happen?"
-                  style={{ ...S.input, height: 80, resize: 'vertical', fontFamily: 'inherit' }} />
-              ) : (
-                <div style={S.text}>{event.cause || <em style={{color:'#94a3b8'}}>(none)</em>}</div>
-              )}
-            </Section>
-
-            {isAuthed && (
-              <button onClick={saveNotes} disabled={busy} style={{ ...S.saveBtn, ...(busy ? S.btnDisabled : null) }}>
-                {busy ? 'Saving…' : 'Save notes'}
-              </button>
-            )}
-
-            <Section title="Timeline">
-              <Row label="Reported" value={`${new Date(event.reported_at).toLocaleString()}${event.reporter_name ? ` · ${event.reporter_name}` : ''}`} />
-              {event.resolved_at && (
-                <Row label="Resolved" value={`${new Date(event.resolved_at).toLocaleString()}${event.resolver_name ? ` · ${event.resolver_name}` : ''}`} />
-              )}
-              {event.downtime_minutes != null && (
-                <Row label="Downtime" value={`${event.downtime_minutes} min`} />
-              )}
-            </Section>
-
-            {isAuthed && nextStatuses.length > 0 && (
-              <Section title="Change Status">
-                <div style={S.statusActions}>
-                  {nextStatuses.map(s => (
-                    <button key={s} onClick={() => changeStatus(s)} disabled={busy} style={{
-                      ...S.statusActionBtn,
-                      ...(s === 'resolved' ? { background: '#22c55e', color: '#fff', borderColor: '#22c55e' } : null),
-                    }}>
-                      → {STATUS_LABEL[s]}
+            {/* ── Photos ─────────────────────────────────────────── */}
+            {photos.length > 0 && (
+              <Section title={`Photos · ${photos.length}`}>
+                <div style={S.photoGrid}>
+                  {photos.map((url, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setLightboxIdx(i)}
+                      style={S.photoTile}
+                      aria-label={`Open photo ${i + 1}`}
+                    >
+                      <img src={url} alt={`BM photo ${i + 1}`} style={S.photoImg} loading="lazy" />
                     </button>
                   ))}
                 </div>
               </Section>
             )}
+
+            {/* ── Action taken ───────────────────────────────────── */}
+            <Section title="Action Taken / 조치 내용">
+              {isAuthed ? (
+                <textarea
+                  value={action}
+                  onChange={(e) => setAction(e.target.value)}
+                  placeholder="What did you do? / 무엇을 했나요?"
+                  style={{ ...S.input, height: 100 }}
+                />
+              ) : (
+                <div style={S.text}>
+                  {event.action_taken || <em style={{ color: '#64748b' }}>(미입력)</em>}
+                </div>
+              )}
+            </Section>
+
+            {/* ── Root cause ─────────────────────────────────────── */}
+            <Section title="Root Cause / 원인">
+              {isAuthed ? (
+                <textarea
+                  value={cause}
+                  onChange={(e) => setCause(e.target.value)}
+                  placeholder="Why did it happen? / 왜 발생했나요?"
+                  style={{ ...S.input, height: 80 }}
+                />
+              ) : (
+                <div style={S.text}>
+                  {event.cause || <em style={{ color: '#64748b' }}>(미입력)</em>}
+                </div>
+              )}
+            </Section>
+
+            {/* ── Save / Resolve actions ────────────────────────── */}
+            {isAuthed && (
+              <div style={S.primaryActions}>
+                <button
+                  type="button"
+                  onClick={saveNotes}
+                  disabled={busy}
+                  style={{
+                    ...S.btn, ...S.btnSecondary,
+                    ...(busy ? S.btnDisabled : null),
+                  }}
+                >
+                  {busy ? '저장 중…' : '메모 저장'}
+                </button>
+                {event.status !== 'resolved' && (
+                  <button
+                    type="button"
+                    onClick={resolveNow}
+                    disabled={busy}
+                    style={{
+                      ...S.btn, ...S.btnResolve,
+                      ...(busy ? S.btnDisabled : null),
+                    }}
+                  >
+                    ✓ 수리 완료 처리
+                  </button>
+                )}
+              </div>
+            )}
+            {savedFlash && (
+              <div style={S.savedFlash}>✓ 저장되었습니다</div>
+            )}
+
+            {/* ── Timeline ───────────────────────────────────────── */}
+            <Section title="Timeline / 이력">
+              <Row
+                label="Reported"
+                value={`${formatDateTime(event.reported_at)}${event.reporter_name ? ` · ${event.reporter_name}` : ''}`}
+              />
+              {event.downtime_start && (
+                <Row
+                  label="Downtime Start"
+                  value={formatDateTime(event.downtime_start)}
+                />
+              )}
+              {event.resolved_at && (
+                <Row
+                  label="Resolved"
+                  value={`${formatDateTime(event.resolved_at)}${event.resolver_name ? ` · ${event.resolver_name}` : ''}`}
+                />
+              )}
+              {event.downtime_minutes != null && (
+                <Row label="Downtime" value={`${event.downtime_minutes} 분`} />
+              )}
+              {event.cause_code && (
+                <Row label="Cause Code" value={event.cause_code} />
+              )}
+            </Section>
+
+            {/* ── Change status — secondary controls ─────────────── */}
+            {isAuthed && nextStatuses.length > 0 && (
+              <Section title="Change Status / 상태 변경">
+                <div style={S.statusGrid}>
+                  {nextStatuses.map(s => {
+                    const isResolve = s === 'resolved';
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => changeStatus(s)}
+                        disabled={busy}
+                        style={{
+                          ...S.statusBtn,
+                          ...(isResolve ? S.statusBtnResolve : null),
+                          ...(busy ? S.btnDisabled : null),
+                        }}
+                      >
+                        → {STATUS_LABEL[s]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Section>
+            )}
+          </div>
+        )}
+
+        {/* ── Lightbox ───────────────────────────────────────────── */}
+        {lightboxIdx != null && photos[lightboxIdx] && (
+          <div
+            style={S.lightbox}
+            onClick={() => setLightboxIdx(null)}
+            role="dialog"
+            aria-modal="true"
+          >
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setLightboxIdx(null); }}
+              style={S.lightboxClose}
+              aria-label="Close"
+            >×</button>
+            <img
+              src={photos[lightboxIdx]}
+              alt={`Photo ${lightboxIdx + 1}`}
+              style={S.lightboxImg}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div style={S.lightboxCount}>
+              {lightboxIdx + 1} / {photos.length}
+            </div>
           </div>
         )}
       </main>
+      <BottomNav />
     </>
   );
 }
 
+// ── Section wrapper ─────────────────────────────────────────────────
 function Section({ title, children }) {
   return (
     <section style={S.section}>
@@ -191,60 +400,223 @@ function Section({ title, children }) {
   );
 }
 
+// ── Row inside a section (label/value) ──────────────────────────────
 function Row({ label, value }) {
   return (
-    <div style={{ display: 'flex', gap: 12, padding: '4px 0', fontSize: 13 }}>
-      <span style={{ color: '#94a3b8', minWidth: 80 }}>{label}</span>
-      <span style={{ color: '#0f172a', flex: 1 }}>{value}</span>
+    <div style={S.row}>
+      <span style={S.rowLabel}>{label}</span>
+      <span style={S.rowValue}>{value}</span>
     </div>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────
 const S = {
   page: {
-    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    background: '#f8fafc', minHeight: '100vh', color: '#0f172a', paddingBottom: 80,
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Tamil", "Noto Sans KR", sans-serif',
+    background: '#0f172a', minHeight: '100vh', color: '#e2e8f0',
+    paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px) + 24px)',
+    maxWidth: 480, margin: '0 auto',
   },
+
+  // Header
   header: {
-    position: 'sticky', top: 0, zIndex: 10,
-    background: '#0f172a', color: '#fff', padding: '14px 16px',
-    display: 'flex', alignItems: 'center', gap: 12,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    position: 'sticky', top: 0, zIndex: 20,
+    background: '#0f172a',
+    borderBottom: '1px solid #1f2937',
+    padding: '10px 14px',
+    display: 'flex', alignItems: 'center', gap: 10,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
   },
-  backLink: { color: '#94a3b8', textDecoration: 'none', fontSize: 14 },
-  title: { fontSize: 18, fontWeight: 600, flex: 1, margin: 0 },
-  loading: { padding: 32, textAlign: 'center', color: '#64748b' },
-  error: { margin: 16, padding: 14, background: '#fee2e2', color: '#991b1b', borderRadius: 10 },
-  content: { padding: 16 },
-
-  statusCard: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+  backLink: {
+    color: '#94a3b8', textDecoration: 'none', fontSize: 14,
+    minHeight: 44, minWidth: 44,
+    display: 'inline-flex', alignItems: 'center',
+    padding: '0 4px',
   },
-  statusBadge: { padding: '6px 14px', borderRadius: 999, fontSize: 13, fontWeight: 700 },
-  severity: { fontSize: 12, color: '#64748b', fontWeight: 700 },
+  headerTitleWrap: { flex: 1, minWidth: 0, textAlign: 'center' },
+  headerTitle: {
+    fontSize: 15, fontWeight: 700, color: '#f8fafc',
+    fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  headerSubtitle: {
+    fontSize: 11, color: '#94a3b8', marginTop: 1,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
 
-  section: { background: '#fff', borderRadius: 12, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden' },
-  sectionTitle: { padding: '10px 14px', fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' },
+  loading: { padding: 48, textAlign: 'center', color: '#64748b' },
+  errorBox: {
+    margin: 14, padding: 14,
+    background: 'rgba(220,38,38,0.15)', color: '#fca5a5',
+    border: '1px solid rgba(220,38,38,0.4)',
+    borderRadius: 10, fontSize: 14,
+  },
+
+  content: { padding: 14 },
+
+  // Hero card
+  heroCard: {
+    position: 'relative', display: 'flex',
+    background: '#1e293b', borderRadius: 12, marginBottom: 12,
+    overflow: 'hidden', border: '1px solid #1f2937',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+  },
+  heroBar: { width: 4, flexShrink: 0 },
+  heroBody: { flex: 1, padding: '14px 14px 14px 14px' },
+  heroPillRow: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  statusPill: {
+    padding: '5px 12px', borderRadius: 999,
+    fontSize: 12, fontWeight: 800, letterSpacing: 0.5,
+    border: '1px solid',
+  },
+  severityPill: {
+    padding: '5px 12px', borderRadius: 999,
+    fontSize: 12, fontWeight: 800, letterSpacing: 0.5,
+    border: '1px solid #334155',
+    background: '#0f172a', color: '#cbd5e1',
+  },
+  heroId: {
+    fontSize: 11, color: '#64748b',
+    fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+  },
+
+  // Section
+  section: {
+    background: '#1e293b', borderRadius: 12, marginBottom: 10,
+    border: '1px solid #1f2937', overflow: 'hidden',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+  },
+  sectionTitle: {
+    padding: '10px 14px', fontSize: 11, fontWeight: 700,
+    color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6,
+    background: '#0f172a', borderBottom: '1px solid #1f2937',
+  },
   sectionBody: { padding: 14 },
 
-  assetLink: { display: 'block', textDecoration: 'none', color: '#0f172a' },
-  text: { fontSize: 14, color: '#334155', whiteSpace: 'pre-wrap' },
-  input: {
-    width: '100%', padding: '11px 12px', border: '1px solid #cbd5e1', borderRadius: 8,
-    fontSize: 16, outline: 'none', boxSizing: 'border-box', background: '#f8fafc',
+  // Asset link
+  assetLink: {
+    position: 'relative',
+    display: 'block', textDecoration: 'none', color: '#e2e8f0',
+    padding: '4px 28px 4px 0', minHeight: 44,
   },
-  saveBtn: {
-    width: '100%', padding: '12px 18px', background: '#0f172a', color: '#fff',
-    border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer',
-    marginBottom: 12,
+  assetTag: {
+    fontSize: 15, fontWeight: 700, color: '#f8fafc',
+    fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
   },
-  btnDisabled: { background: '#cbd5e1', color: '#64748b', cursor: 'not-allowed' },
+  assetName: { fontSize: 13, color: '#cbd5e1', marginTop: 3 },
+  assetLoc: { fontSize: 12, color: '#94a3b8', marginTop: 3 },
+  assetArrow: {
+    position: 'absolute', right: 0, top: '50%',
+    transform: 'translateY(-50%)',
+    color: '#64748b', fontSize: 20,
+  },
 
-  statusActions: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
-  statusActionBtn: {
-    padding: '12px', border: '2px solid #cbd5e1', background: '#fff', color: '#0f172a',
-    borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+  // Body text & inputs
+  text: {
+    fontSize: 14, color: '#e2e8f0', lineHeight: 1.5,
+    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+  },
+  input: {
+    width: '100%', padding: '12px',
+    border: '1px solid #334155', borderRadius: 8,
+    fontSize: 16, outline: 'none', boxSizing: 'border-box',
+    background: '#0b1220', color: '#f1f5f9',
+    fontFamily: 'inherit', resize: 'vertical',
+    minHeight: 44,
+  },
+
+  // Photo grid + lightbox
+  photoGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: 8,
+  },
+  photoTile: {
+    position: 'relative', padding: 0, border: 'none',
+    background: '#0f172a', borderRadius: 8, overflow: 'hidden',
+    cursor: 'pointer', aspectRatio: '1',
+  },
+  photoImg: {
+    width: '100%', height: '100%', objectFit: 'cover',
+    display: 'block',
+  },
+  lightbox: {
+    position: 'fixed', inset: 0, zIndex: 100,
+    background: 'rgba(0,0,0,0.92)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 20,
+  },
+  lightboxImg: {
+    maxWidth: '100%', maxHeight: '85vh',
+    objectFit: 'contain', borderRadius: 4,
+  },
+  lightboxClose: {
+    position: 'absolute', top: 'calc(env(safe-area-inset-top, 0) + 12px)', right: 16,
+    width: 44, height: 44, borderRadius: '50%',
+    background: 'rgba(255,255,255,0.15)', color: '#fff',
+    border: 'none', cursor: 'pointer',
+    fontSize: 24, lineHeight: '24px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  lightboxCount: {
+    position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0) + 16px)', left: 0, right: 0,
+    textAlign: 'center', color: '#cbd5e1', fontSize: 13,
+    fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+  },
+
+  // Primary actions
+  primaryActions: {
+    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+    margin: '4px 0 12px',
+  },
+  btn: {
+    padding: '14px', borderRadius: 10, border: 'none',
+    fontSize: 14, fontWeight: 700, cursor: 'pointer',
+    minHeight: 48,
+  },
+  btnSecondary: {
+    background: '#334155', color: '#e2e8f0',
+    border: '1px solid #475569',
+  },
+  btnResolve: {
+    background: '#16a34a', color: '#fff',
+    boxShadow: '0 4px 12px rgba(22,163,74,0.35)',
+    fontSize: 15,
+  },
+  btnDisabled: {
+    background: '#1f2937', color: '#475569',
+    cursor: 'not-allowed', boxShadow: 'none',
+  },
+  savedFlash: {
+    background: 'rgba(34,197,94,0.18)',
+    color: '#86efac',
+    border: '1px solid rgba(34,197,94,0.5)',
+    padding: '10px 14px', borderRadius: 8, marginBottom: 12,
+    fontSize: 13, textAlign: 'center', fontWeight: 600,
+  },
+
+  // Row label/value
+  row: {
+    display: 'flex', gap: 12,
+    padding: '6px 0', fontSize: 13,
+    borderBottom: '1px solid rgba(31,41,55,0.5)',
+  },
+  rowLabel: { color: '#64748b', minWidth: 110, flexShrink: 0 },
+  rowValue: { color: '#e2e8f0', flex: 1, wordBreak: 'break-word' },
+
+  // Status workflow buttons
+  statusGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
+  statusBtn: {
+    padding: '12px 10px', minHeight: 48,
+    border: '1px solid #334155',
+    background: '#0f172a', color: '#cbd5e1',
+    borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+  },
+  statusBtnResolve: {
+    background: 'rgba(34,197,94,0.18)', color: '#86efac',
+    border: '1px solid rgba(34,197,94,0.6)',
   },
 };

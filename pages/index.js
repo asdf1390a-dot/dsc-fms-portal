@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import Head from "next/head";
+import BottomNav from "../components/BottomNav";
 
 // ═══ 다국어 ═══
 const T = {
@@ -1107,12 +1108,23 @@ export default function DSCFMSPortal(){
     <>
       <Head>
         <title>DSC FMS Portal</title>
-        <meta name="viewport" content="width=device-width,initial-scale=1"/>
+        <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
+        <meta name="theme-color" content="#0f172a"/>
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
-        <style>{`body{margin:0;background:#f5f5f5;} *{box-sizing:border-box;}`}</style>
+        <style>{`
+          body{margin:0;background:#0f172a;} *{box-sizing:border-box;}
+          @media (max-width: 600px){
+            .dsc-sidebar{display:none !important;}
+            .dsc-shell{height:auto !important; min-height:100vh; max-width:480px; margin:0 auto;}
+            .dsc-main{padding:12px !important;}
+            .dsc-topbar{flex-wrap:wrap;}
+            .dsc-content-scroll{padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 24px) !important;}
+            table{font-size:11px !important;}
+          }
+        `}</style>
       </Head>
-      <div style={{display:"flex",height:"100vh",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",color:"#1a1a1a"}}>
-        <nav style={{width:200,background:"var(--color-background-primary,#fff)",borderRight:"0.5px solid #e0e0e0",display:"flex",flexDirection:"column",flexShrink:0}}>
+      <div className="dsc-shell" style={{display:"flex",height:"100vh",fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",color:"#1a1a1a",background:"#0f172a"}}>
+        <nav className="dsc-sidebar" style={{width:200,background:"var(--color-background-primary,#fff)",borderRight:"0.5px solid #e0e0e0",display:"flex",flexDirection:"column",flexShrink:0}}>
           <div style={{padding:"12px 14px",borderBottom:"0.5px solid #e0e0e0"}}>
             <div style={{fontSize:13,fontWeight:500}}>{t.appName}</div>
             <div style={{fontSize:10,color:"#999",marginTop:1}}>{t.appSub}</div>
@@ -1142,8 +1154,8 @@ export default function DSCFMSPortal(){
             </div>
           </div>
         </nav>
-        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-          <div style={{background:"var(--color-background-primary,#fff)",borderBottom:"0.5px solid #e0e0e0",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",flexShrink:0}}>
+        <div className="dsc-main" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#fff"}}>
+          <div className="dsc-topbar" style={{background:"var(--color-background-primary,#fff)",borderBottom:"0.5px solid #e0e0e0",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",flexShrink:0}}>
             <div style={{fontSize:11,color:"#999"}}>{t.appName} › <span style={{color:"#1a1a1a",fontWeight:500}}>{pageTitle[page]||page}</span></div>
             <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
               {[{v:`${t.bmUrgent} 4`,bg:"#FCEBEB",cl:"#A32D2D"},{v:`${t.pmToday} 7`,bg:"#FAEEDA",cl:"#854F0B"},{v:`${t.idleR} ${INIT_ASSETS.filter(a=>a.status==="Idle-R").length}`,bg:"#E6F1FB",cl:"#185FA5"},{v:`${t.idleNR} ${INIT_ASSETS.filter(a=>a.status==="Idle-NR").length}`,bg:"#FCEBEB",cl:"#A32D2D"}]
@@ -1154,7 +1166,7 @@ export default function DSCFMSPortal(){
               <span style={{fontSize:10,color:"#999"}}>2026.05.06</span>
             </div>
           </div>
-          <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+          <div className="dsc-content-scroll" style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
             {page==="dashboard"&&<Dashboard t={t} setPage={setPage}/>}
             {page==="master"&&<AssetMaster t={t}/>}
             {page==="avail"&&<Availability t={t}/>}
@@ -1172,6 +1184,7 @@ export default function DSCFMSPortal(){
           </div>
         </div>
       </div>
+      <BottomNav />
     </>
   );
 }
