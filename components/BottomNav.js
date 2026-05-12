@@ -9,7 +9,7 @@ const ITEMS = [
   { href: '/pm',        label: 'PM',    match: (p) => p === '/pm' || p.startsWith('/pm/'),         icon: ClipboardIcon },
   { href: '/disposals', label: '자산',  match: (p) => p === '/disposals' || p.startsWith('/disposals/'), icon: FactoryIcon },
   { href: '/kpi',       label: 'KPI',   match: (p) => p === '/kpi' || p.startsWith('/kpi/'),         icon: ChartIcon },
-  { href: '/login',     label: '내정보', match: (p) => p === '/login' || p === '/profile',           icon: UserIcon },
+  { href: '/career',    label: '내정보', match: (p) => p === '/career' || p.startsWith('/career/'),  icon: UserIcon },
 ];
 
 export default function BottomNav() {
