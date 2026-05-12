@@ -54,6 +54,11 @@ export default function InventoryIndexPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const lowCount = useMemo(
+    () => parts.filter(p => (p.min_quantity ?? 0) > 0 && (p.quantity ?? 0) <= (p.min_quantity ?? 0)).length,
+    [parts]
+  );
+
   // ── Client-side filter ──────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -89,6 +94,13 @@ export default function InventoryIndexPage() {
           <h1 style={S.title}>예비품 재고</h1>
           <Link href="/inventory/new" style={S.fab} aria-label="새 예비품 등록">+</Link>
         </header>
+
+        {lowCount > 0 && (
+          <Link href="/inventory/dashboard" style={S.lowBanner}>
+            <span>⚠ 재고부족 <strong>{lowCount}건</strong></span>
+            <span style={S.lowBannerArrow}>대시보드 →</span>
+          </Link>
+        )}
 
         <div style={S.searchWrap}>
           <input
@@ -182,6 +194,11 @@ export default function InventoryIndexPage() {
             })}
           </ul>
         )}
+
+        <div style={S.footerLinks}>
+          <Link href="/inventory/dashboard" style={S.footerLink}>📊 재고 현황 대시보드</Link>
+          <Link href="/vendors" style={S.footerLink}>🏢 공급업체 관리</Link>
+        </div>
       </main>
 
       <BottomNav />
@@ -220,4 +237,8 @@ const S = {
   loading: { padding: 48, textAlign: 'center', color: '#64748b' },
   empty: { padding: 48, textAlign: 'center', color: '#64748b', fontSize: 14 },
   errorBox: { margin: 14, padding: 14, background: 'rgba(220,38,38,0.15)', color: '#fca5a5', border: '1px solid rgba(220,38,38,0.4)', borderRadius: 10, fontSize: 14 },
+  lowBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(220,38,38,0.15)', borderBottom: '1px solid rgba(220,38,38,0.45)', color: '#fca5a5', fontSize: 13, fontWeight: 700, textDecoration: 'none' },
+  lowBannerArrow: { fontSize: 12, color: '#fca5a5', fontWeight: 700 },
+  footerLinks: { display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 14px 16px' },
+  footerLink: { padding: '12px 14px', background: '#1e293b', border: '1px solid #1f2937', borderRadius: 10, color: '#60a5fa', textDecoration: 'none', fontSize: 13, fontWeight: 700, textAlign: 'center' },
 };

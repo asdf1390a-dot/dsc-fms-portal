@@ -19,6 +19,7 @@ export default function NewInventoryPage() {
   const { isAuthed, loading: authLoading } = useAuth();
 
   const [assets, setAssets] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [loadingMaster, setLoadingMaster] = useState(true);
 
   const [nameKo, setNameKo] = useState('');
@@ -26,6 +27,11 @@ export default function NewInventoryPage() {
   const [partNumber, setPartNumber] = useState('');
   const [category, setCategory] = useState('consumable');
   const [assetId, setAssetId] = useState('');
+  const [vendorId, setVendorId] = useState('');
+  const [maker, setMaker] = useState('');
+  const [specs, setSpecs] = useState('');
+  const [unitPrice, setUnitPrice] = useState('');
+  const [currency, setCurrency] = useState('INR');
   const [quantity, setQuantity] = useState('0');
   const [minQuantity, setMinQuantity] = useState('5');
   const [unit, setUnit] = useState('EA');
@@ -47,14 +53,14 @@ export default function NewInventoryPage() {
     let cancelled = false;
     (async () => {
       setLoadingMaster(true);
-      const { data, error: fetchErr } = await supabase
-        .from('assets')
-        .select('id, machine_asset_number, name_en')
-        .eq('status', 'active')
-        .order('machine_asset_number');
+      const [assetsRes, vendorsRes] = await Promise.all([
+        supabase.from('assets').select('id, machine_asset_number, name_en').eq('status', 'active').order('machine_asset_number'),
+        supabase.from('vendors').select('id, name, currency').eq('is_active', true).order('name'),
+      ]);
       if (cancelled) return;
-      if (fetchErr) { setError(fetchErr.message); setLoadingMaster(false); return; }
-      setAssets(data || []);
+      if (assetsRes.error) { setError(assetsRes.error.message); setLoadingMaster(false); return; }
+      setAssets(assetsRes.data || []);
+      setVendors(vendorsRes.data || []);
       setLoadingMaster(false);
     })();
     return () => { cancelled = true; };
@@ -81,6 +87,11 @@ export default function NewInventoryPage() {
           part_number: partNumber.trim() || null,
           category,
           asset_id: assetId || null,
+          vendor_id: vendorId || null,
+          maker: maker.trim() || null,
+          specs: specs.trim() || null,
+          unit_price: unitPrice ? Number(unitPrice) : null,
+          currency: currency || 'INR',
           quantity: qty,
           min_quantity: minQty,
           unit: unit.trim() || 'EA',
@@ -170,6 +181,27 @@ export default function NewInventoryPage() {
               </div>
             </Section>
 
+            <Section title="제조사">
+              <input type="text" value={maker} onChange={e => setMaker(e.target.value)} placeholder="예: SKF, NSK" style={S.input} />
+            </Section>
+
+            <Section title="규격/사양">
+              <input type="text" value={specs} onChange={e => setSpecs(e.target.value)} placeholder="예: 60x110x22mm, C3" style={S.input} />
+            </Section>
+
+            <Section title="공급업체">
+              <select value={vendorId} onChange={e => {
+                setVendorId(e.target.value);
+                const v = vendors.find(x => x.id === e.target.value);
+                if (v?.currency) setCurrency(v.currency);
+              }} style={S.input} disabled={loadingMaster}>
+                <option value="">{vendors.length === 0 ? '공급업체 없음 — /vendors/new에서 먼저 등록' : '— 선택 안 함 —'}</option>
+                {vendors.map(v => (
+                  <option key={v.id} value={v.id}>{v.name}{v.currency ? ` (${v.currency})` : ''}</option>
+                ))}
+              </select>
+            </Section>
+
             <Section title="관련 자산">
               <select
                 value={assetId}
@@ -218,6 +250,17 @@ export default function NewInventoryPage() {
                 placeholder="EA, SET, L, m 등"
                 style={S.input}
               />
+            </Section>
+
+            <Section title="단가">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 8 }}>
+                <input type="number" min="0" step="0.01" value={unitPrice} onChange={e => setUnitPrice(e.target.value)} placeholder="예: 1250" style={S.input} />
+                <select value={currency} onChange={e => setCurrency(e.target.value)} style={S.input}>
+                  <option value="INR">INR</option>
+                  <option value="KRW">KRW</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
             </Section>
 
             <Section title="보관 위치">

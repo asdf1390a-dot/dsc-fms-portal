@@ -90,9 +90,21 @@ export default function PMIndexPage() {
   useAuth(); // session bootstrap (not gated — list is readable by anon)
 
   const [schedules, setSchedules] = useState([]);
+  const [compliance, setCompliance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
+
+  // ── Fetch compliance ────────────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/pm/compliance');
+        const json = await res.json();
+        if (res.ok) setCompliance(json.monthly || null);
+      } catch (_) {}
+    })();
+  }, []);
 
   // ── Fetch on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -189,6 +201,23 @@ export default function PMIndexPage() {
           <h1 style={S.title}>PM 일정</h1>
           <Link href="/pm/new" style={S.fab} aria-label="새 PM 계획">+</Link>
         </header>
+
+        {compliance && (
+          <div style={S.complianceCard}>
+            <div style={S.complianceLabel}>이번 달 PM 이행률</div>
+            <div style={S.complianceRow}>
+              <div style={{ ...S.complianceBig, color: complianceColor(compliance.compliance_rate) }}>
+                {compliance.compliance_rate != null ? `${compliance.compliance_rate}%` : '—'}
+              </div>
+              <div style={S.complianceSub}>
+                <div>완료 <strong style={{ color: '#86efac' }}>{compliance.total_completed}</strong> / {compliance.total_scheduled}건</div>
+                {compliance.total_overdue > 0 && (
+                  <div style={{ color: '#fca5a5' }}>지연 <strong>{compliance.total_overdue}</strong>건</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={S.tabBar}>
           {FILTER_ORDER.map(key => {
@@ -311,4 +340,16 @@ const S = {
   loading: { padding: 48, textAlign: 'center', color: '#64748b' },
   empty: { padding: 48, textAlign: 'center', color: '#64748b', fontSize: 14 },
   errorBox: { margin: 14, padding: 14, background: 'rgba(220,38,38,0.15)', color: '#fca5a5', border: '1px solid rgba(220,38,38,0.4)', borderRadius: 10, fontSize: 14 },
+  complianceCard: { margin: '12px 14px 4px', padding: 14, background: '#1e293b', borderRadius: 12, border: '1px solid #1f2937' },
+  complianceLabel: { fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  complianceRow: { display: 'flex', alignItems: 'center', gap: 14 },
+  complianceBig: { fontSize: 32, fontWeight: 800, fontFamily: 'ui-monospace,Menlo,monospace', lineHeight: 1, minWidth: 90 },
+  complianceSub: { fontSize: 13, color: '#cbd5e1', lineHeight: 1.5 },
 };
+
+function complianceColor(rate) {
+  if (rate == null) return '#94a3b8';
+  if (rate >= 95) return '#86efac';
+  if (rate >= 80) return '#fcd34d';
+  return '#fca5a5';
+}

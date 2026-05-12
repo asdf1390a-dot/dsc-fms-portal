@@ -7,12 +7,21 @@ import { useAuth } from '../../lib/use-auth';
 import BottomNav from '../../components/BottomNav';
 
 const FREQ_OPTIONS = [
-  { days: 7,   label: '7일 (주간)' },
-  { days: 14,  label: '14일 (격주)' },
-  { days: 30,  label: '30일 (월간)' },
-  { days: 60,  label: '60일 (2개월)' },
-  { days: 90,  label: '90일 (3개월)' },
-  { days: 180, label: '180일 (6개월)' },
+  { days: 1,   label: '1일 (매일)',  freqLabel: 'daily' },
+  { days: 7,   label: '7일 (주간)',  freqLabel: 'weekly' },
+  { days: 14,  label: '14일 (격주)', freqLabel: 'biweekly' },
+  { days: 30,  label: '30일 (월간)', freqLabel: 'monthly' },
+  { days: 90,  label: '90일 (분기)', freqLabel: 'quarterly' },
+  { days: 180, label: '180일 (반기)', freqLabel: 'biannual' },
+  { days: 365, label: '365일 (연간)', freqLabel: 'annual' },
+];
+
+const CATEGORY_OPTIONS = [
+  { value: 'general',     label: '일반' },
+  { value: 'lubrication', label: '윤활' },
+  { value: 'inspection',  label: '점검' },
+  { value: 'calibration', label: '교정' },
+  { value: 'cleaning',    label: '청소' },
 ];
 
 export default function NewPMPage() {
@@ -25,6 +34,9 @@ export default function NewPMPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [frequencyDays, setFrequencyDays] = useState(30);
+  const [category, setCategory] = useState('general');
+  const [checklistItems, setChecklistItems] = useState([]); // [string]
+  const [checklistInput, setChecklistInput] = useState('');
   const [startDate, setStartDate] = useState('');
   const [estimatedHours, setEstimatedHours] = useState('');
   const [busy, setBusy] = useState(false);
@@ -75,6 +87,7 @@ export default function NewPMPage() {
     setBusy(true);
     setError(null);
     try {
+      const freqMeta = FREQ_OPTIONS.find(f => f.days === frequencyDays);
       const { data: plan, error: planErr } = await supabase
         .from('pm_plans')
         .insert({
@@ -82,6 +95,9 @@ export default function NewPMPage() {
           title: title.trim(),
           description: description.trim() || null,
           frequency_days: frequencyDays,
+          frequency_label: freqMeta?.freqLabel || null,
+          category: category || 'general',
+          checklist: checklistItems.map(item => ({ item, required: true })),
           estimated_hours: estimatedHours ? parseFloat(estimatedHours) : null,
           is_active: true,
         })
@@ -89,15 +105,18 @@ export default function NewPMPage() {
         .single();
       if (planErr) throw planErr;
 
-      const { error: schedErr } = await supabase
-        .from('pm_schedules')
-        .insert({
-          plan_id: plan.id,
-          asset_id: assetId,
-          scheduled_date: startDate,
-          status: 'pending',
+      // Try RPC for bulk schedule generation; fall back to single insert.
+      const rpcRes = await supabase.rpc('pm_generate_schedules', {
+        p_plan_id: plan.id,
+        p_start_date: startDate,
+        p_count: 12,
+      });
+      if (rpcRes.error) {
+        // Fallback to single schedule (if RPC not installed yet)
+        await supabase.from('pm_schedules').insert({
+          plan_id: plan.id, asset_id: assetId, scheduled_date: startDate, status: 'pending',
         });
-      if (schedErr) throw schedErr;
+      }
 
       await router.push('/pm');
     } catch (err) {
@@ -161,6 +180,32 @@ export default function NewPMPage() {
                 placeholder="작업 절차 및 주의사항"
                 style={{ ...S.input, height: 100, fontFamily: 'inherit', resize: 'vertical' }}
               />
+            </Section>
+
+            <Section title="작업 유형">
+              <select value={category} onChange={e => setCategory(e.target.value)} style={S.input}>
+                {CATEGORY_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </Section>
+
+            <Section title="체크리스트 항목 (선택)">
+              <div style={{ background: '#0b1220', borderRadius: 8, padding: 10, border: '1px solid #334155', marginBottom: 8 }}>
+                {checklistItems.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#64748b', padding: '4px 0' }}>항목 없음</div>
+                ) : checklistItems.map((it, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, color: '#e2e8f0' }}>
+                    <span>✓ {it}</span>
+                    <button type="button" onClick={() => setChecklistItems(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'transparent', color: '#fca5a5', border: 'none', cursor: 'pointer', fontSize: 14 }}>×</button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input type="text" value={checklistInput} onChange={e => setChecklistInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (checklistInput.trim()) { setChecklistItems(prev => [...prev, checklistInput.trim()]); setChecklistInput(''); } } }}
+                  placeholder="예: 오일 레벨 확인" style={{ ...S.input, flex: 1 }} />
+                <button type="button" onClick={() => { if (checklistInput.trim()) { setChecklistItems(prev => [...prev, checklistInput.trim()]); setChecklistInput(''); } }}
+                  style={{ padding: '0 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>추가</button>
+              </div>
             </Section>
 
             <Section title="점검 주기 *">

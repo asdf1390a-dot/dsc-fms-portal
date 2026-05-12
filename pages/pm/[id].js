@@ -39,11 +39,17 @@ export default function PMDetailPage() {
   const { user, isAuthed, fullName } = useAuth();
 
   const [schedule, setSchedule] = useState(null);
+  const [workLogs, setWorkLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [completedByName, setCompletedByName] = useState('');
   const [actualHours, setActualHours] = useState('');
   const [notes, setNotes] = useState('');
+  const [result, setResult] = useState('ok'); // 'ok' | 'abnormal' | 'deferred'
+  const [findings, setFindings] = useState('');
+  const [actionTaken, setActionTaken] = useState('');
+  const [checklistResult, setChecklistResult] = useState([]);
+  const [parts, setParts] = useState([]); // [{part_name, quantity, unit}]
   const [busy, setBusy] = useState(false);
   const [showCompleteForm, setShowCompleteForm] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -55,7 +61,7 @@ export default function PMDetailPage() {
     (async () => {
       const { data, error: fetchErr } = await supabase
         .from('pm_schedules')
-        .select(`id, scheduled_date, status, completed_at, completed_by_name, actual_hours, notes, created_at, plan_id, asset_id, pm_plans(id, title, description, frequency_days, estimated_hours), assets(machine_asset_number, name_en, location)`)
+        .select(`id, scheduled_date, status, completed_at, completed_by_name, actual_hours, notes, created_at, plan_id, asset_id, pm_plans(id, title, description, frequency_days, estimated_hours, checklist, category), assets(machine_asset_number, name_en, location)`)
         .eq('id', id)
         .maybeSingle();
       if (cancelled) return;
@@ -64,6 +70,20 @@ export default function PMDetailPage() {
       setSchedule(data);
       setActualHours(data.actual_hours ? String(data.actual_hours) : '');
       setNotes(data.notes || '');
+
+      // Initialize checklistResult from plan.checklist
+      const cl = Array.isArray(data?.pm_plans?.checklist) ? data.pm_plans.checklist : [];
+      setChecklistResult(cl.map(c => ({ item: c.item || c, checked: false, note: '' })));
+
+      // Fetch previous work logs for this plan
+      const { data: logs } = await supabase
+        .from('pm_work_logs')
+        .select('id, performed_by_name, actual_hours, result, created_at, findings, notes')
+        .eq('plan_id', data.plan_id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      setWorkLogs(logs || []);
+
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -76,36 +96,59 @@ export default function PMDetailPage() {
 
   async function completeNow() {
     if (!completedByName.trim()) { setError('완료자 이름을 입력하세요'); return; }
+    if (result === 'abnormal' && !findings.trim()) { setError('이상 내용을 입력하세요'); return; }
     setBusy(true);
     setError(null);
     try {
-      const now = new Date().toISOString();
-      const { error: updErr } = await supabase.from('pm_schedules').update({
-        status: 'completed',
-        completed_at: now,
-        completed_by: user?.id || null,
-        completed_by_name: completedByName.trim(),
-        actual_hours: actualHours ? parseFloat(actualHours) : null,
-        notes: notes.trim() || null,
-      }).eq('id', schedule.id);
-      if (updErr) throw updErr;
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) throw new Error('로그인이 필요합니다');
 
-      // Auto-create next schedule
-      const freqDays = schedule.pm_plans?.frequency_days || 30;
-      const nextDate = new Date();
-      nextDate.setDate(nextDate.getDate() + freqDays);
-      const p = n => String(n).padStart(2, '0');
-      const nextDateStr = `${nextDate.getFullYear()}-${p(nextDate.getMonth() + 1)}-${p(nextDate.getDate())}`;
-      await supabase.from('pm_schedules').insert({
-        plan_id: schedule.plan_id,
-        asset_id: schedule.asset_id,
-        scheduled_date: nextDateStr,
-        status: 'pending',
+      // Send to work-logs API (creates log + parts + flips schedule status)
+      const validParts = parts.filter(p => p.part_name && p.part_name.trim());
+      const resp = await fetch('/api/pm/work-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          schedule_id: schedule.id,
+          plan_id: schedule.plan_id,
+          asset_id: schedule.asset_id,
+          performed_by_name: completedByName.trim(),
+          actual_hours: actualHours ? parseFloat(actualHours) : null,
+          result,
+          findings: findings.trim() || null,
+          action_taken: actionTaken.trim() || null,
+          notes: notes.trim() || null,
+          checklist_result: checklistResult,
+          parts: validParts.map(p => ({
+            part_name: p.part_name.trim(),
+            quantity: p.quantity || 1,
+            unit: p.unit || 'ea',
+          })),
+        }),
       });
+      const respJson = await resp.json();
+      if (!resp.ok) throw new Error(respJson.error || 'save failed');
 
+      // Auto-create next schedule (only for ok/abnormal results)
+      if (result !== 'deferred') {
+        const freqDays = schedule.pm_plans?.frequency_days || 30;
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + freqDays);
+        const p = n => String(n).padStart(2, '0');
+        const nextDateStr = `${nextDate.getFullYear()}-${p(nextDate.getMonth() + 1)}-${p(nextDate.getDate())}`;
+        await supabase.from('pm_schedules').insert({
+          plan_id: schedule.plan_id,
+          asset_id: schedule.asset_id,
+          scheduled_date: nextDateStr,
+          status: 'pending',
+        });
+      }
+
+      const now = new Date().toISOString();
       setSchedule(prev => ({
         ...prev,
-        status: 'completed',
+        status: result === 'deferred' ? prev.status : 'completed',
         completed_at: now,
         completed_by_name: completedByName.trim(),
         actual_hours: actualHours ? parseFloat(actualHours) : null,
@@ -261,6 +304,70 @@ export default function PMDetailPage() {
                     style={S.input}
                   />
                 </div>
+
+                <div style={S.fieldGap}>
+                  <div style={S.fieldLabel}>작업 결과 *</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                    {[['ok','정상완료','#16a34a'],['abnormal','이상발견','#f97316'],['deferred','미룸','#64748b']].map(([k,l,c]) => (
+                      <button key={k} type="button" onClick={() => setResult(k)}
+                        style={{ padding: 12, borderRadius: 8, border: '2px solid', borderColor: result===k?c:'#334155',
+                          background: result===k?`${c}33`:'#0b1220', color: result===k?'#f8fafc':'#94a3b8', fontSize: 13, fontWeight: 700, cursor: 'pointer', minHeight: 44 }}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {result === 'abnormal' && (
+                  <>
+                    <div style={S.fieldGap}>
+                      <div style={S.fieldLabel}>이상 내용 *</div>
+                      <textarea value={findings} onChange={e=>setFindings(e.target.value)} placeholder="발견 이상 사항" style={{ ...S.input, ...S.textarea }} />
+                    </div>
+                    <div style={S.fieldGap}>
+                      <div style={S.fieldLabel}>조치 내용</div>
+                      <input type="text" value={actionTaken} onChange={e=>setActionTaken(e.target.value)} placeholder="긴급 조치, BM 신고 등" style={S.input} />
+                    </div>
+                  </>
+                )}
+
+                {checklistResult.length > 0 && (
+                  <div style={S.fieldGap}>
+                    <div style={S.fieldLabel}>체크리스트</div>
+                    <div style={{ background: '#0b1220', borderRadius: 8, padding: 10, border: '1px solid #334155' }}>
+                      {checklistResult.map((c, i) => (
+                        <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', fontSize: 13, color: '#e2e8f0', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={!!c.checked} onChange={e => {
+                            setChecklistResult(prev => prev.map((p, idx) => idx === i ? { ...p, checked: e.target.checked } : p));
+                          }} style={{ width: 18, height: 18 }} />
+                          {c.item}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={S.fieldGap}>
+                  <div style={S.fieldLabel}>사용 부품 (선택)</div>
+                  {parts.map((p, i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 60px 40px', gap: 6, marginBottom: 6 }}>
+                      <input type="text" placeholder="부품명" value={p.part_name} onChange={e => {
+                        setParts(prev => prev.map((x, idx) => idx === i ? { ...x, part_name: e.target.value } : x));
+                      }} style={{ ...S.input, padding: '8px 10px', minHeight: 40, fontSize: 14 }} />
+                      <input type="number" placeholder="수량" value={p.quantity} step="0.01" onChange={e => {
+                        setParts(prev => prev.map((x, idx) => idx === i ? { ...x, quantity: e.target.value } : x));
+                      }} style={{ ...S.input, padding: '8px 10px', minHeight: 40, fontSize: 14 }} />
+                      <input type="text" placeholder="ea" value={p.unit} onChange={e => {
+                        setParts(prev => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x));
+                      }} style={{ ...S.input, padding: '8px 10px', minHeight: 40, fontSize: 14 }} />
+                      <button type="button" onClick={() => setParts(prev => prev.filter((_, idx) => idx !== i))}
+                        style={{ background: '#1f2937', color: '#fca5a5', border: 'none', borderRadius: 6, fontSize: 16, cursor: 'pointer' }}>×</button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setParts(prev => [...prev, { part_name: '', quantity: 1, unit: 'ea' }])}
+                    style={{ width: '100%', padding: 10, background: '#1e293b', color: '#60a5fa', border: '1px dashed #334155', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 부품 추가</button>
+                </div>
+
                 <div style={S.fieldGap}>
                   <div style={S.fieldLabel}>메모</div>
                   <textarea
@@ -300,6 +407,28 @@ export default function PMDetailPage() {
                 <Row label="완료시각" value={formatDateTime(schedule.completed_at)} />
                 <Row label="실제 작업시간" value={schedule.actual_hours ? `${schedule.actual_hours}h` : null} />
                 <Row label="메모" value={schedule.notes} />
+              </Section>
+            )}
+
+            {workLogs.length > 0 && (
+              <Section title={`이전 작업 기록 (${workLogs.length})`}>
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {workLogs.map(l => (
+                    <li key={l.id} style={{ padding: '8px 0', borderBottom: '1px solid #1f2937', fontSize: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <span style={{ color: '#cbd5e1', fontWeight: 600 }}>{l.performed_by_name}</span>
+                        <span style={{ color: '#64748b', fontFamily: 'ui-monospace,Menlo,monospace' }}>{formatDateTime(l.created_at)}</span>
+                      </div>
+                      <div style={{ color: '#94a3b8' }}>
+                        {l.actual_hours ? `${l.actual_hours}h · ` : ''}
+                        <span style={{ color: l.result === 'ok' ? '#86efac' : l.result === 'abnormal' ? '#fdba74' : '#94a3b8' }}>
+                          {l.result === 'ok' ? '정상' : l.result === 'abnormal' ? '이상발견' : '미룸'}
+                        </span>
+                      </div>
+                      {l.findings && <div style={{ color: '#fcd34d', fontSize: 11, marginTop: 2 }}>{l.findings}</div>}
+                    </li>
+                  ))}
+                </ul>
               </Section>
             )}
 
