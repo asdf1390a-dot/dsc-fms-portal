@@ -1145,7 +1145,7 @@ export default function DSCFMSPortal(){
         const { data, error } = await supabase
           .from("assets")
           .select("machine_asset_number,name_en,model,make,location,status,asset_class_code,extra,asset_classes(code,category_code,name_en)")
-          .order("machine_asset_number",{ascending:false})
+          .order("machine_asset_number",{ascending:true})
           .range(0,4999);
         if(error) throw error;
         if(!cancelled) setDbAssets((data||[]).map(mapSupabaseAsset));
