@@ -245,7 +245,7 @@ export default function NewBMPage() {
         supabase
           .from('assets')
           .select('id, machine_asset_number, name_en, name_ta, location, status, asset_class_code, model, extra')
-          .order('machine_asset_number', { ascending: true }),
+          .order('machine_asset_number', { ascending: false }),
         supabase
           .from('cause_codes')
           .select('code, name_en, name_ta, group_name')
