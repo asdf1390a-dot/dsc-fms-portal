@@ -65,7 +65,38 @@ export default function ReportsIndex() {
       <div style={S.page}>
         <div style={S.wrap}>
           <h1 style={S.h1}>경영실적</h1>
-          <p style={S.sub}>월별 보고 데이터 입력 및 2번/3번 파일 자동 생성</p>
+
+          {/* 3개 독립 섹션 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+            <Link href="/reports/quality" style={S.sectionCard}>
+              <div style={S.sectionIcon}>📊</div>
+              <div>
+                <div style={S.sectionTitle}>품질지수</div>
+                <div style={S.sectionSub}>Korea Report 업로드 → Excel·PPT 자동 생성</div>
+              </div>
+              <div style={S.arrow}>›</div>
+            </Link>
+            <Link href="/reports/production" style={S.sectionCard}>
+              <div style={S.sectionIcon}>🏭</div>
+              <div>
+                <div style={S.sectionTitle}>생산성</div>
+                <div style={S.sectionSub}>생산현황 업로드 → 생산성집계·PPT 자동 생성</div>
+              </div>
+              <div style={S.arrow}>›</div>
+            </Link>
+            <Link href="/reports/weekly" style={S.sectionCard}>
+              <div style={S.sectionIcon}>📋</div>
+              <div>
+                <div style={S.sectionTitle}>주간업무</div>
+                <div style={S.sectionSub}>주차별 업무 내용 입력 및 관리</div>
+              </div>
+              <div style={S.arrow}>›</div>
+            </Link>
+          </div>
+
+          {/* 구분선 */}
+          <div style={{ borderTop: '1px solid #334155', marginBottom: 16 }} />
+          <p style={S.sub}>월별 통합 보고</p>
 
           <button onClick={createCurrent} disabled={creating || !isAuthed} style={S.addBtn}>
             {creating ? '생성 중…' : '+ 새 월 추가 (이번 달)'}
@@ -122,8 +153,15 @@ function Badge({ ok, children }) {
 const S = {
   page: { minHeight: '100vh', background: '#0f172a', color: '#f1f5f9', paddingBottom: 80 },
   wrap: { maxWidth: 480, margin: '0 auto', padding: '16px 14px 0' },
-  h1: { fontSize: 22, margin: '4px 0 4px', fontWeight: 800 },
-  sub: { fontSize: 13, color: '#94a3b8', margin: '0 0 14px' },
+  h1: { fontSize: 22, margin: '4px 0 16px', fontWeight: 800 },
+  sub: { fontSize: 13, color: '#94a3b8', margin: '0 0 12px' },
+  sectionCard: {
+    display: 'flex', alignItems: 'center', gap: 14, textDecoration: 'none', color: '#f1f5f9',
+    background: '#1e293b', border: '1px solid #334155', borderRadius: 14, padding: '14px 16px',
+  },
+  sectionIcon: { fontSize: 28 },
+  sectionTitle: { fontSize: 16, fontWeight: 700, marginBottom: 2 },
+  sectionSub: { fontSize: 12, color: '#94a3b8' },
   addBtn: {
     width: '100%', padding: '12px 14px', background: '#3b82f6', color: '#fff',
     border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 700,
