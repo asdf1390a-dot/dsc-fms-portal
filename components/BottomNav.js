@@ -9,6 +9,7 @@ const ITEMS = [
   { href: '/pm',        label: 'PM',    match: (p) => p === '/pm' || p.startsWith('/pm/'),         icon: ClipboardIcon },
   { href: '/disposals', label: '자산',  match: (p) => p === '/disposals' || p.startsWith('/disposals/'), icon: FactoryIcon },
   { href: '/kpi',       label: 'KPI',   match: (p) => p === '/kpi' || p.startsWith('/kpi/'),         icon: ChartIcon },
+  { href: '/reports',   label: '경영실적', match: (p) => p === '/reports' || p.startsWith('/reports/'), icon: ChartBarIcon },
   { href: '/career',    label: '내정보', match: (p) => p === '/career' || p.startsWith('/career/'),  icon: UserIcon },
 ];
 
@@ -90,6 +91,16 @@ function FactoryIcon() {
   );
 }
 
+function ChartBarIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="12" width="4" height="9" rx="1" />
+      <rect x="10" y="7" width="4" height="14" rx="1" />
+      <rect x="17" y="3" width="4" height="18" rx="1" />
+    </svg>
+  );
+}
+
 function UserIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -108,7 +119,7 @@ const S = {
     boxShadow: '0 -4px 12px rgba(0,0,0,0.4)',
   },
   inner: {
-    display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)',
+    display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
     height: 60, maxWidth: 480, margin: '0 auto',
   },
   item: {
