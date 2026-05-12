@@ -1,6 +1,33 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Head from "next/head";
 import BottomNav from "../components/BottomNav";
+import { supabase } from "../lib/supabase";
+
+// ═══ Supabase row → UI 형식 매퍼 (DCMI 스키마 ↔ 기존 INIT_ASSETS 모양) ═══
+// DB에는 line 컬럼이 없어 location 키워드로 추론 (기존 parseCSV와 동일 규칙)
+const inferLine = (loc) => {
+  const u = (loc || "").toUpperCase();
+  if (u.includes("PRESS")) return "PRESS";
+  if (u.includes("CCB") || u.includes("QXI") || u.includes("AI3") || u.includes("SU2I") || u.includes("BI3") || u.includes("BN7I")) return "CCB";
+  if (u.includes("PROJECTION")) return "PROJECTION";
+  if (u.includes("PS7I") || u.includes("FSB") || u.includes("RSB") || u.includes("FRAM")) return "FRAM";
+  return "COMMON";
+};
+const mapSupabaseAsset = (r) => {
+  // DB status값(active/idle 등) → UI status값(Active/Idle-NR 등)
+  const stMap = { active: "Active", idle: "Idle-NR", idle_r: "Idle-R", idle_nr: "Idle-NR", fixed_sale: "Fixed-Sale" };
+  const cat = r.asset_classes?.category_code || r?.extra?.major_code || (r.asset_class_code || "").split(".")[0] || "";
+  return {
+    no: r.machine_asset_number || "",
+    name: r.name_en || "",
+    model: r.model || "",
+    make: r.make || "",
+    line: inferLine(r.location),
+    cat,
+    status: stMap[r.status] || (r.status ? r.status[0].toUpperCase() + r.status.slice(1) : "Active"),
+    location: r.location || "",
+  };
+};
 
 // ═══ 다국어 ═══
 const T = {
@@ -473,8 +500,11 @@ const MENU_CATS=[{key:"master",icon:"ti-layout-list"},{key:"avail",icon:"ti-char
 const LINES_DATA=[{l:"FRAM",v:87.1,c:"#378ADD",m:48,bm:7,idle:8.5},{l:"CCB",v:85.8,c:"#D4537E",m:62,bm:5,idle:5.2},{l:"PRESS",v:92.3,c:"#639922",m:31,bm:3,idle:2.1},{l:"PROJECTION",v:90.2,c:"#EF9F27",m:27,bm:2,idle:1.3}];
 
 // ═══ 설비 마스터 화면 ═══
-function AssetMaster({t}){
-  const [assets,setAssets]=useState(INIT_ASSETS);
+function AssetMaster({t,extAssets,extLoading,extError}){
+  // 부모(DSCFMSPortal)에서 Supabase fetch 결과를 props로 전달; 비어있으면 로컬 fallback
+  const [assets,setAssets]=useState(extAssets&&extAssets.length?extAssets:INIT_ASSETS);
+  // 부모 fetch 결과가 도착/변경되면 동기화
+  useEffect(()=>{ if(extAssets&&extAssets.length) setAssets(extAssets); },[extAssets]);
   const [q,setQ]=useState("");
   const [fLine,setFLine]=useState("");
   const [fCat,setFCat]=useState("");
@@ -565,7 +595,9 @@ function AssetMaster({t}){
             </button>
           ))}
         </div>
-        <span style={{fontSize:10,color:"#999"}}>실제 데이터 · Master List REV.01 2025</span>
+        <span style={{fontSize:10,color:extError?"#A32D2D":"#999"}} title={extError||""}>
+          {extLoading ? "Supabase 로딩 중..." : extError ? `DB 오류 (로컬 데이터 표시 중): ${extError}` : `Supabase · ${assets.length}건 로드됨`}
+        </span>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:12}}>
@@ -1021,7 +1053,9 @@ function Settings({t,lang,setLang}){
 }
 
 // ═══ 대시보드 ═══
-function Dashboard({t,setPage}){
+function Dashboard({t,setPage,assets:dashAssets}){
+  // 부모 fetch가 비었으면 로컬 INIT_ASSETS 폴백
+  const ASSETS_DASH = (dashAssets&&dashAssets.length)?dashAssets:INIT_ASSETS;
   const BM_ALERTS=[
     {dot:"#E24B4A",title:"FRAM · DCMI-FRM-CRT-128 — 서보 에러",meta:"Robot / 08:42 · 라인정지 · IDLE 2.5h"},
     {dot:"#E24B4A",title:"CCB · DCMI-CCB-CRT-68 — Pendant 불량",meta:"Robot / 10:15 · IDLE 1.5h"},
@@ -1054,7 +1088,7 @@ function Dashboard({t,setPage}){
         <div style={s.card}>
           <div style={{fontSize:11,fontWeight:500,marginBottom:10}}>Idle 설비 현황</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-            {[{v:`${INIT_ASSETS.filter(a=>a.status==="Idle-NR").length}`,cl:"#A32D2D",lbl:"Non-running"},{v:`${INIT_ASSETS.filter(a=>a.status==="Idle-R").length}`,cl:"#854F0B",lbl:"Running(대기)"},{v:`${INIT_ASSETS.length}`,cl:"#185FA5",lbl:"전체 등록"},{v:`${INIT_ASSETS.filter(a=>a.status==="Fixed-Sale").length}`,cl:"#534AB7",lbl:"Fixed Sale"}]
+            {[{v:`${ASSETS_DASH.filter(a=>a.status==="Idle-NR").length}`,cl:"#A32D2D",lbl:"Non-running"},{v:`${ASSETS_DASH.filter(a=>a.status==="Idle-R").length}`,cl:"#854F0B",lbl:"Running(대기)"},{v:`${ASSETS_DASH.length}`,cl:"#185FA5",lbl:"전체 등록"},{v:`${ASSETS_DASH.filter(a=>a.status==="Fixed-Sale").length}`,cl:"#534AB7",lbl:"Fixed Sale"}]
               .map((d,i)=>(<div key={i} style={{background:"#f5f5f5",borderRadius:8,padding:"8px 10px",textAlign:"center"}}><div style={{fontSize:17,fontWeight:600,color:d.cl}}>{d.v}대</div><div style={{fontSize:9,color:"#999",marginTop:1}}>{d.lbl}</div></div>))}
           </div>
         </div>
@@ -1077,7 +1111,7 @@ function Dashboard({t,setPage}){
       </div>
       <div style={{fontSize:11,fontWeight:500,marginBottom:8}}>빠른 이동 Quick Access</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-        {[{icon:"ti-layout-list",lbl:"설비 마스터",pg:"master",sub:`${INIT_ASSETS.length}대 등록`},{icon:"ti-alert-triangle",lbl:"BM 이력",pg:"bm",sub:"긴급 4건"},{icon:"ti-tool",lbl:"PM Plan",pg:"pm",sub:"5월 68%"},{icon:"ti-chart-bar",lbl:"가동률 OEE",pg:"avail",sub:"87.3%"},{icon:"ti-clipboard-list",lbl:"작업지시",pg:"wo",sub:"미완료 3건"},{icon:"ti-package",lbl:"부품/재고",pg:"parts",sub:"준비중"},{icon:"ti-chart-line",lbl:"KPI 리포트",pg:"kpi",sub:"준비중"},{icon:"ti-settings",lbl:"설정",pg:"settings",sub:"언어·권한"}]
+        {[{icon:"ti-layout-list",lbl:"설비 마스터",pg:"master",sub:`${ASSETS_DASH.length}대 등록`},{icon:"ti-alert-triangle",lbl:"BM 이력",pg:"bm",sub:"긴급 4건"},{icon:"ti-tool",lbl:"PM Plan",pg:"pm",sub:"5월 68%"},{icon:"ti-chart-bar",lbl:"가동률 OEE",pg:"avail",sub:"87.3%"},{icon:"ti-clipboard-list",lbl:"작업지시",pg:"wo",sub:"미완료 3건"},{icon:"ti-package",lbl:"부품/재고",pg:"parts",sub:"준비중"},{icon:"ti-chart-line",lbl:"KPI 리포트",pg:"kpi",sub:"준비중"},{icon:"ti-settings",lbl:"설정",pg:"settings",sub:"언어·권한"}]
           .map(({icon,lbl,pg,sub})=>(<div key={pg} onClick={()=>setPage(pg)} style={{...s.card,textAlign:"center",cursor:"pointer",padding:14}}>
             <i className={`ti ${icon}`} style={{fontSize:20,color:"#185FA5",marginBottom:5,display:"block"}} aria-hidden="true"/>
             <div style={{fontSize:11,fontWeight:500}}>{lbl}</div>
@@ -1095,6 +1129,40 @@ export default function DSCFMSPortal(){
   const t=T[lang];
   const n=t.nav;
   const pageTitle={dashboard:"대시보드",master:"설비 마스터",avail:"가동률 OEE",bm:"BM 이력",pm:"PM Plan",settings:"설정",wo:"작업지시",parts:"부품/재고",kpi:"KPI 리포트",team:"팀 관리"};
+
+  // ── Supabase: assets 테이블 로드 (단일 SSOT) ──
+  // anon 권한으로 read. 실패 시 INIT_ASSETS로 폴백 → UX 보존.
+  const [dbAssets,setDbAssets]=useState([]);
+  const [dbLoading,setDbLoading]=useState(true);
+  const [dbError,setDbError]=useState(null);
+
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      setDbLoading(true); setDbError(null);
+      try{
+        // 약 2,235건 — 한 번에 로드. range로 5000까지 (Supabase 기본 1000 cap 회피)
+        const { data, error } = await supabase
+          .from("assets")
+          .select("machine_asset_number,name_en,model,make,location,status,asset_class_code,extra,asset_classes(code,category_code,name_en)")
+          .order("machine_asset_number",{ascending:true})
+          .range(0,4999);
+        if(error) throw error;
+        if(!cancelled) setDbAssets((data||[]).map(mapSupabaseAsset));
+      }catch(e){
+        if(!cancelled) setDbError(e.message||"DB 연결 실패");
+      }finally{
+        if(!cancelled) setDbLoading(false);
+      }
+    })();
+    return ()=>{ cancelled=true; };
+  },[]);
+
+  // 실제 사용할 assets: DB 성공 → DB / 그 외(로딩·에러) → 로컬 폴백
+  const effectiveAssets = (dbError||dbAssets.length===0) ? INIT_ASSETS : dbAssets;
+  const totalLabel = dbLoading ? "…" : (dbError ? "!" : String(effectiveAssets.length));
+  const idleR = effectiveAssets.filter(a=>a.status==="Idle-R").length;
+  const idleNR = effectiveAssets.filter(a=>a.status==="Idle-NR").length;
 
   const NI=({pg,icon,label,badge})=>(
     <div onClick={()=>setPage(pg)} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 14px",fontSize:11,color:page===pg?"#185FA5":"var(--color-text-secondary,#555)",cursor:"pointer",background:page===pg?"#EBF3FC":"transparent",borderRight:page===pg?"2px solid #185FA5":"2px solid transparent",fontWeight:page===pg?500:400}}>
@@ -1133,7 +1201,7 @@ export default function DSCFMSPortal(){
             <div style={{fontSize:9,color:"#999",padding:"6px 14px 2px",textTransform:"uppercase",letterSpacing:".06em"}}>{n.overview}</div>
             <NI pg="dashboard" icon="ti-layout-dashboard" label={n.dashboard}/>
             <div style={{fontSize:9,color:"#999",padding:"8px 14px 2px",textTransform:"uppercase",letterSpacing:".06em"}}>{n.asset}</div>
-            <NI pg="master" icon="ti-layout-list" label={n.master} badge={{v:INIT_ASSETS.length,bg:"#E6F1FB",cl:"#185FA5"}}/>
+            <NI pg="master" icon="ti-layout-list" label={n.master} badge={{v:totalLabel,bg:dbError?"#FCEBEB":"#E6F1FB",cl:dbError?"#A32D2D":"#185FA5"}}/>
             <NI pg="avail" icon="ti-chart-bar" label={n.avail}/>
             <div style={{fontSize:9,color:"#999",padding:"8px 14px 2px",textTransform:"uppercase",letterSpacing:".06em"}}>{n.maint}</div>
             <NI pg="bm" icon="ti-alert-triangle" label={n.bm} badge={{v:"4",bg:"#FCEBEB",cl:"#A32D2D"}}/>
@@ -1158,7 +1226,7 @@ export default function DSCFMSPortal(){
           <div className="dsc-topbar" style={{background:"var(--color-background-primary,#fff)",borderBottom:"0.5px solid #e0e0e0",padding:"8px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap",flexShrink:0}}>
             <div style={{fontSize:11,color:"#999"}}>{t.appName} › <span style={{color:"#1a1a1a",fontWeight:500}}>{pageTitle[page]||page}</span></div>
             <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-              {[{v:`${t.bmUrgent} 4`,bg:"#FCEBEB",cl:"#A32D2D"},{v:`${t.pmToday} 7`,bg:"#FAEEDA",cl:"#854F0B"},{v:`${t.idleR} ${INIT_ASSETS.filter(a=>a.status==="Idle-R").length}`,bg:"#E6F1FB",cl:"#185FA5"},{v:`${t.idleNR} ${INIT_ASSETS.filter(a=>a.status==="Idle-NR").length}`,bg:"#FCEBEB",cl:"#A32D2D"}]
+              {[{v:`${t.bmUrgent} 4`,bg:"#FCEBEB",cl:"#A32D2D"},{v:`${t.pmToday} 7`,bg:"#FAEEDA",cl:"#854F0B"},{v:`${t.idleR} ${idleR}`,bg:"#E6F1FB",cl:"#185FA5"},{v:`${t.idleNR} ${idleNR}`,bg:"#FCEBEB",cl:"#A32D2D"}]
                 .map((p,i)=><span key={i} style={{fontSize:10,padding:"3px 8px",borderRadius:999,fontWeight:500,background:p.bg,color:p.cl}}>{p.v}</span>)}
               <select value={lang} onChange={e=>setLang(e.target.value)} style={{fontSize:10,padding:"3px 6px",borderRadius:6,border:"0.5px solid #ccc",background:"#fff",cursor:"pointer"}}>
                 {Object.entries(LANG_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
@@ -1167,8 +1235,8 @@ export default function DSCFMSPortal(){
             </div>
           </div>
           <div className="dsc-content-scroll" style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
-            {page==="dashboard"&&<Dashboard t={t} setPage={setPage}/>}
-            {page==="master"&&<AssetMaster t={t}/>}
+            {page==="dashboard"&&<Dashboard t={t} setPage={setPage} assets={effectiveAssets}/>}
+            {page==="master"&&<AssetMaster t={t} extAssets={effectiveAssets} extLoading={dbLoading} extError={dbError}/>}
             {page==="avail"&&<Availability t={t}/>}
             {page==="bm"&&<BMHistory t={t}/>}
             {page==="pm"&&<PMPlan t={t}/>}
