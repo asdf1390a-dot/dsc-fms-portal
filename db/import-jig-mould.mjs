@@ -32,15 +32,16 @@ function parseSheet(name, category) {
 
     let payload;
     if (category === 'JIG') {
-      // [NO, CLS, CODE, NUM, CAR, MODEL, PROCESS, STAGE, PART_NAME, PART_NO, LOCATION, REMARK]
-      const car = String(r[4] || '').trim();
-      const model = String(r[5] || '').trim();
-      const process_name = String(r[6] || '').trim();
-      const stage = String(r[7] || '').trim();
-      const part_name = String(r[8] || '').trim();
-      const part_no = String(r[9] || '').trim();
-      const location = String(r[10] || '').trim();
-      const remark = String(r[11] || '').trim();
+      // [NO, CLS, CODE, NUM, BOOTH_NO, CAR, MODEL, PROCESS, STAGE, PART_NAME, PART_NO, LOCATION, REMARK]
+      const booth_no = String(r[4] || '').trim();
+      const car = String(r[5] || '').trim();
+      const model = String(r[6] || '').trim();
+      const process_name = String(r[7] || '').trim();
+      const stage = String(r[8] || '').trim();
+      const part_name = String(r[9] || '').trim();
+      const part_no = String(r[10] || '').trim();
+      const location = String(r[11] || '').trim();
+      const remark = String(r[12] || '').trim();
       payload = {
         asset_class_code: cls,
         machine_asset_code: code,
@@ -50,7 +51,7 @@ function parseSheet(name, category) {
         location: location || null,
         remark: remark || null,
         status: 'active',
-        extra: { car, process_name, stage, part_no, kind: 'jig' },
+        extra: { booth_no, car, process_name, stage, part_no, kind: 'jig' },
       };
     } else { // MOULD
       // [NO, CLS, CODE, NUM, MODEL, PROCESS, PART_NAME, PART_NO, LOCATION, REMARK]
@@ -97,7 +98,7 @@ const BATCH = 200;
 let inserted = 0, failed = 0;
 for (let i = 0; i < all.length; i += BATCH) {
   const slice = all.slice(i, i + BATCH);
-  const res = await fetch(`${URL}/rest/v1/assets`, {
+  const res = await fetch(`${URL}/rest/v1/assets?on_conflict=machine_asset_number`, {
     method: 'POST',
     headers: {
       'apikey': SR,
