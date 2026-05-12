@@ -8,15 +8,16 @@ import BottomNav from '../../components/BottomNav';
 
 // ── Status flow & labels ────────────────────────────────────────────
 const STATUS_FLOW = {
-  open:          ['in_progress', 'pending_parts', 'resolved', 'wontfix'],
+  open:          ['in_progress', 'pending_parts', 'resolved', 'wontfix', 'cancelled'],
   in_progress:   ['pending_parts', 'resolved', 'open'],
   pending_parts: ['in_progress', 'resolved'],
   resolved:      ['in_progress'],
   wontfix:       ['open'],
+  cancelled:     ['open'],
 };
 const STATUS_LABEL = {
   open: 'Open', in_progress: 'In Progress', pending_parts: 'Wait Parts',
-  resolved: 'Resolved', wontfix: "Won't Fix",
+  resolved: 'Resolved', wontfix: "Won't Fix", cancelled: 'Cancelled',
 };
 const STATUS_PILL = {
   open:          { bg: 'rgba(220,38,38,0.18)',  fg: '#fca5a5', border: 'rgba(220,38,38,0.6)' },
@@ -24,6 +25,7 @@ const STATUS_PILL = {
   pending_parts: { bg: 'rgba(234,179,8,0.18)',  fg: '#fde68a', border: 'rgba(234,179,8,0.6)' },
   resolved:      { bg: 'rgba(34,197,94,0.18)',  fg: '#86efac', border: 'rgba(34,197,94,0.6)' },
   wontfix:       { bg: 'rgba(100,116,139,0.2)', fg: '#cbd5e1', border: 'rgba(100,116,139,0.6)' },
+  cancelled:     { bg: 'rgba(71,85,105,0.25)',  fg: '#94a3b8', border: 'rgba(71,85,105,0.6)' },
 };
 
 // ── Severity → priority bar colour ─────────────────────────────────
@@ -80,7 +82,9 @@ export default function BMDetailPage() {
     try {
       const patch = { status: newStatus };
       if (newStatus === 'resolved') {
-        patch.resolved_at = new Date().toISOString();
+        const nowIso = new Date().toISOString();
+        patch.resolved_at = nowIso;
+        patch.downtime_end = nowIso;
         patch.resolved_by = user?.id;
         patch.resolver_name = fullName || user?.email;
       }
@@ -119,11 +123,13 @@ export default function BMDetailPage() {
     setBusy(true);
     setError(null);
     try {
+      const nowIso = new Date().toISOString();
       const patch = {
         action_taken: action,
         cause,
         status: 'resolved',
-        resolved_at: new Date().toISOString(),
+        resolved_at: nowIso,
+        downtime_end: nowIso,
         resolved_by: user?.id || null,
         resolver_name: fullName || user?.email || null,
       };
@@ -164,7 +170,13 @@ export default function BMDetailPage() {
               <div style={S.headerSubtitle}>{event.assets.name_en}</div>
             )}
           </div>
-          <div style={{ width: 44 }} />
+          {isAuthed && event ? (
+            <Link href={`/bm/edit/${event.id}`} style={S.editLink} aria-label="Edit">
+              편집
+            </Link>
+          ) : (
+            <div style={{ width: 44 }} />
+          )}
         </header>
 
         {loading && <div style={S.loading}>불러오는 중…</div>}
@@ -434,6 +446,12 @@ const S = {
     color: '#94a3b8', textDecoration: 'none', fontSize: 14,
     minHeight: 44, minWidth: 44,
     display: 'inline-flex', alignItems: 'center',
+    padding: '0 4px',
+  },
+  editLink: {
+    color: '#93c5fd', textDecoration: 'none', fontSize: 14,
+    minHeight: 44, minWidth: 44, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end',
     padding: '0 4px',
   },
   headerTitleWrap: { flex: 1, minWidth: 0, textAlign: 'center' },
