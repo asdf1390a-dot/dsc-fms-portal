@@ -48,6 +48,9 @@ const T = {
     placeholderCar: '— Select car model —',
     placeholderProcess: '— Select process line —',
     placeholderAsset: '— Select asset —',
+    stepDept: 'Dept', stepType: 'Type', stepAsset: 'Asset', stepDetails: 'Details',
+    searchAsset: 'Search asset…',
+    noAssets: 'No assets found',
   },
   ko: {
     title: '고장 신고',
@@ -80,6 +83,9 @@ const T = {
     placeholderCar: '— 차종 선택 —',
     placeholderProcess: '— 공정 선택 —',
     placeholderAsset: '— 자산 선택 —',
+    stepDept: '부서', stepType: '유형', stepAsset: '자산', stepDetails: '상세입력',
+    searchAsset: '자산 검색…',
+    noAssets: '자산이 없습니다',
   },
   ta: {
     title: 'கோளாறு அறிக்கை',
@@ -112,6 +118,9 @@ const T = {
     placeholderCar: '— கார் மாடல் தேர்வு —',
     placeholderProcess: '— செயல்முறை தேர்வு —',
     placeholderAsset: '— சொத்து தேர்வு —',
+    stepDept: 'பிரிவு', stepType: 'வகை', stepAsset: 'சொத்து', stepDetails: 'விவரம்',
+    searchAsset: 'சொத்து தேடல்…',
+    noAssets: 'சொத்து இல்லை',
   },
   hi: {
     title: 'खराबी रिपोर्ट',
@@ -144,6 +153,9 @@ const T = {
     placeholderCar: '— कार मॉडल चुनें —',
     placeholderProcess: '— प्रक्रिया लाइन चुनें —',
     placeholderAsset: '— संपत्ति चुनें —',
+    stepDept: 'विभाग', stepType: 'प्रकार', stepAsset: 'संपत्ति', stepDetails: 'विवरण',
+    searchAsset: 'संपत्ति खोजें…',
+    noAssets: 'कोई संपत्ति नहीं',
   },
 };
 
@@ -190,8 +202,8 @@ export default function NewBMPage() {
   const [dept, setDept] = useState('');               // 'machine' | 'mould' | 'jig'
   const [machineCat, setMachineCat] = useState('');   // category_code (e.g. '01','03','04')
   const [carModel, setCarModel] = useState('');       // for mould/jig: model field
-  const [processLine, setProcessLine] = useState(''); // for mould/jig: extra.process field
   const [assetId, setAssetId] = useState('');
+  const [assetSearch, setAssetSearch] = useState('');
 
   // Other form state
   const [severity, setSeverity] = useState('medium');
@@ -314,44 +326,37 @@ export default function NewBMPage() {
     return arr;
   }, [dept, deptAssets]);
 
-  // For Mould/JIG: Step 3 = unique process lines for the selected car model
-  const processLineOptions = useMemo(() => {
-    if ((dept !== 'mould' && dept !== 'jig') || !carModel) return [];
-    const set = new Set();
-    for (const a of deptAssets) {
-      const cm = (a.model || '').trim() || '__UNASSIGNED__';
-      if (cm !== carModel) continue;
-      const proc = (a.extra && a.extra.process) || '';
-      if (proc) set.add(proc.trim());
-    }
-    const arr = Array.from(set).sort();
-    return arr;
-  }, [dept, deptAssets, carModel]);
-
-  // Step 4 — filtered asset list
+  // Step 3 — filtered asset list
   const finalAssets = useMemo(() => {
     if (!dept) return [];
     if (dept === 'machine') {
       if (!machineCat) return [];
       return deptAssets.filter(a => assetCategoryCode(a) === machineCat);
     }
-    // mould / jig: filter by carModel AND processLine
+    // mould / jig: filter by carModel only
     if (!carModel) return [];
     return deptAssets.filter(a => {
       const cm = (a.model || '').trim() || '__UNASSIGNED__';
-      if (cm !== carModel) return false;
-      if (processLine) {
-        const proc = (a.extra && a.extra.process) || '';
-        return proc.trim() === processLine;
-      }
-      return true;
+      return cm === carModel;
     });
-  }, [dept, deptAssets, machineCat, carModel, processLine]);
+  }, [dept, deptAssets, machineCat, carModel]);
+
+  // Search-filtered asset list for the card UI
+  const visibleAssets = useMemo(() => {
+    const q = assetSearch.trim().toLowerCase();
+    if (!q) return finalAssets;
+    return finalAssets.filter(a => {
+      const num = (a.machine_asset_number || '').toLowerCase();
+      const nm  = (a.name_en || '').toLowerCase();
+      const ta  = (a.name_ta || '').toLowerCase();
+      const loc = (a.location || '').toLowerCase();
+      return num.includes(q) || nm.includes(q) || ta.includes(q) || loc.includes(q);
+    });
+  }, [finalAssets, assetSearch]);
 
   // Reset downstream selections when an upstream changes
-  useEffect(() => { setMachineCat(''); setCarModel(''); setProcessLine(''); setAssetId(''); }, [dept]);
-  useEffect(() => { setProcessLine(''); setAssetId(''); }, [carModel]);
-  useEffect(() => { setAssetId(''); }, [machineCat, processLine]);
+  useEffect(() => { setMachineCat(''); setCarModel(''); setAssetId(''); setAssetSearch(''); }, [dept]);
+  useEffect(() => { setAssetId(''); setAssetSearch(''); }, [carModel, machineCat]);
 
   // Causes grouped
   const causesByGroup = useMemo(() => {
@@ -375,14 +380,10 @@ export default function NewBMPage() {
       setDept('jig');
       const cm = (found.model || '').trim() || '__UNASSIGNED__';
       setCarModel(cm);
-      const proc = (found.extra && found.extra.process) || '';
-      if (proc) setProcessLine(proc.trim());
     } else if (cat === '10') {
       setDept('mould');
       const cm = (found.model || '').trim() || '__UNASSIGNED__';
       setCarModel(cm);
-      const proc = (found.extra && found.extra.process) || '';
-      if (proc) setProcessLine(proc.trim());
     } else {
       setDept('machine');
       setMachineCat(cat);
@@ -547,6 +548,17 @@ export default function NewBMPage() {
           <div style={S.loading}>…</div>
         ) : (
           <form onSubmit={submit} style={S.form}>
+            {/* ── Step indicator ─────────────────────────────────── */}
+            <StepIndicator
+              steps={[t.stepDept, t.stepType, t.stepAsset, t.stepDetails]}
+              current={
+                !dept ? 0
+                : (dept === 'machine' ? !machineCat : !carModel) ? 1
+                : !assetId ? 2
+                : 3
+              }
+            />
+
             {/* ── Step 1 — Department ────────────────────────────── */}
             <Section title={t.selectDept}>
               <div style={S.deptGrid}>
@@ -614,45 +626,50 @@ export default function NewBMPage() {
               </Section>
             )}
 
-            {/* ── Step 3 — Process Line (Mould / JIG only) ──────── */}
-            {(dept === 'mould' || dept === 'jig') && carModel && processLineOptions.length > 0 && (
-              <Section title={t.selectProcess}>
-                <select
-                  value={processLine}
-                  onChange={(e) => setProcessLine(e.target.value)}
-                  style={S.input}
-                  disabled={loadingMaster}
-                >
-                  <option value="">{t.placeholderProcess}</option>
-                  {processLineOptions.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </Section>
-            )}
-
-            {/* ── Step 4 — Asset ─────────────────────────────────── */}
+            {/* ── Step 3 — Asset (card list) ─────────────────────── */}
             {dept && (
               dept === 'machine'
                 ? machineCat
                 : carModel
             ) ? (
               <Section title={t.selectAsset + ' *'}>
-                <select
-                  value={assetId}
-                  onChange={(e) => setAssetId(e.target.value)}
-                  style={S.input}
-                  disabled={loadingMaster}
-                  required
-                >
-                  <option value="">{t.placeholderAsset}</option>
-                  {finalAssets.map(a => (
-                    <option key={a.id} value={a.id}>
-                      {a.machine_asset_number} — {a.name_en}
-                      {a.location ? ` (${a.location})` : ''}
-                    </option>
-                  ))}
-                </select>
+                {finalAssets.length > 10 && (
+                  <input
+                    type="text"
+                    value={assetSearch}
+                    onChange={(e) => setAssetSearch(e.target.value)}
+                    placeholder={t.searchAsset}
+                    style={{ ...S.input, marginBottom: 10 }}
+                  />
+                )}
+                {visibleAssets.length === 0 ? (
+                  <div style={S.emptyAssets}>{t.noAssets}</div>
+                ) : (
+                  <div style={S.assetList}>
+                    {visibleAssets.map(a => {
+                      const active = assetId === a.id;
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => setAssetId(a.id)}
+                          style={{
+                            ...S.assetCard,
+                            borderColor: active ? '#2563eb' : '#334155',
+                            background: active ? '#1e3a8a' : '#0b1220',
+                          }}
+                          aria-pressed={active}
+                        >
+                          <div style={S.assetNum}>{a.machine_asset_number}</div>
+                          <div style={S.assetName}>{a.name_en || '—'}</div>
+                          {a.location ? (
+                            <div style={S.assetLoc}>{a.location}</div>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </Section>
             ) : null}
 
@@ -815,6 +832,48 @@ export default function NewBMPage() {
   );
 }
 
+function StepIndicator({ steps, current }) {
+  return (
+    <div style={S.stepWrap}>
+      {steps.map((label, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <div key={i} style={S.stepItem}>
+            <div
+              style={{
+                ...S.stepDot,
+                background: done ? '#16a34a' : active ? '#2563eb' : '#1f2937',
+                color: done || active ? '#fff' : '#64748b',
+                borderColor: done ? '#16a34a' : active ? '#2563eb' : '#334155',
+              }}
+            >
+              {done ? '✓' : i + 1}
+            </div>
+            <div
+              style={{
+                ...S.stepLabel,
+                color: active ? '#e2e8f0' : done ? '#94a3b8' : '#64748b',
+                fontWeight: active ? 700 : 500,
+              }}
+            >
+              {label}
+            </div>
+            {i < steps.length - 1 && (
+              <div
+                style={{
+                  ...S.stepBar,
+                  background: done ? '#16a34a' : '#1f2937',
+                }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Section({ title, children }) {
   return (
     <section style={S.section}>
@@ -936,4 +995,49 @@ const S = {
   btnDanger: { background: '#dc2626', color: '#fff' },
   btnSecondary: { background: '#334155', color: '#e2e8f0' },
   btnDisabled: { background: '#1f2937', color: '#475569', cursor: 'not-allowed' },
+
+  // Step indicator
+  stepWrap: {
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+    padding: '12px 4px 14px', marginBottom: 6, gap: 4,
+  },
+  stepItem: {
+    position: 'relative', flex: 1,
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    minWidth: 0,
+  },
+  stepDot: {
+    width: 30, height: 30, borderRadius: '50%',
+    border: '2px solid', display: 'flex',
+    alignItems: 'center', justifyContent: 'center',
+    fontSize: 13, fontWeight: 700, zIndex: 1,
+  },
+  stepLabel: {
+    marginTop: 6, fontSize: 11, textAlign: 'center',
+    maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  stepBar: {
+    position: 'absolute', top: 14, left: '60%', right: '-40%',
+    height: 2, zIndex: 0,
+  },
+
+  // Asset card list
+  assetList: {
+    display: 'grid', gridTemplateColumns: '1fr', gap: 8,
+    maxHeight: 360, overflowY: 'auto',
+  },
+  assetCard: {
+    textAlign: 'left', padding: '10px 12px',
+    border: '2px solid', borderRadius: 10,
+    cursor: 'pointer', minHeight: 56,
+    color: '#e2e8f0',
+  },
+  assetNum: { fontWeight: 700, fontSize: 14, color: '#f1f5f9' },
+  assetName: { fontSize: 13, color: '#cbd5e1', marginTop: 2 },
+  assetLoc: { fontSize: 11, color: '#94a3b8', marginTop: 2 },
+  emptyAssets: {
+    padding: 20, textAlign: 'center', color: '#94a3b8',
+    fontSize: 13,
+  },
 };

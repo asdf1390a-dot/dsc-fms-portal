@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
 import BottomNav from '../../components/BottomNav';
+import AttachmentManager from '../../components/AttachmentManager';
 
 const CODE_PILL = {
   '폐기': { bg: 'rgba(220,38,38,0.18)',  fg: '#fca5a5', border: 'rgba(220,38,38,0.6)' },
@@ -171,14 +172,26 @@ export default function DisposalDetailPage() {
             {row.asset_no && <div style={S.summaryNo}>{row.asset_no}</div>}
           </section>
 
-          {/* Excel 다운로드 */}
-          <a
-            href={`/api/disposals/${row.id}/download`}
-            style={S.downloadBtn}
-            download
-          >
-            📊 Excel 다운로드
-          </a>
+          {/* 다운로드 버튼 */}
+          <div style={S.downloadRow}>
+            <a
+              href={`/api/disposals/${row.id}/download`}
+              style={S.downloadBtn}
+              download
+            >
+              📊 Excel 다운로드
+            </a>
+            {(row.disposal_code === '매각' || row.disposal_code === '폐기') && (
+              <a
+                href={`/api/disposals/report/${row.id}`}
+                target="_blank"
+                rel="noopener"
+                style={S.reportBtn}
+              >
+                📄 처분신청서 다운로드
+              </a>
+            )}
+          </div>
 
           {/* 1. 기본 정보 */}
           <Section title="1. 기본 정보">
@@ -247,6 +260,16 @@ export default function DisposalDetailPage() {
               </ul>
             </Section>
           )}
+
+          {/* 추가 첨부 (사진·파일 이력관리) */}
+          <Section title="추가 첨부 (이력 관리)">
+            <AttachmentManager
+              target="disposal"
+              targetId={row.id}
+              context={row.disposal_code === '매각' ? 'sale' : row.disposal_code === '폐기' ? 'scrap' : 'other'}
+              readOnly={!isAuthed}
+            />
+          </Section>
 
           {/* 메타 */}
           <Section title="메타">
@@ -344,12 +367,22 @@ const S = {
   summaryNo: { fontSize: 12, color: '#94a3b8',
     fontFamily: 'ui-monospace, Menlo, Consolas, monospace' },
 
+  downloadRow: {
+    display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12,
+  },
   downloadBtn: {
     display: 'block', textAlign: 'center',
     background: '#16a34a', color: '#fff',
     padding: '14px', borderRadius: 10, fontSize: 15, fontWeight: 700,
-    textDecoration: 'none', marginBottom: 12, minHeight: 48,
+    textDecoration: 'none', minHeight: 48,
     boxShadow: '0 4px 12px rgba(22,163,74,0.4)',
+  },
+  reportBtn: {
+    display: 'block', textAlign: 'center',
+    background: '#2563eb', color: '#fff',
+    padding: '14px', borderRadius: 10, fontSize: 15, fontWeight: 700,
+    textDecoration: 'none', minHeight: 48,
+    boxShadow: '0 4px 12px rgba(37,99,235,0.4)',
   },
 
   section: {

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
 import PhotoUploader from '../../components/PhotoUploader';
+import AttachmentManager from '../../components/AttachmentManager';
 
 const STATUS_STYLES = {
   active:      { bg: '#dcfce7', fg: '#166534', label: 'ACTIVE' },
@@ -148,6 +149,15 @@ export default function AssetDetail() {
               </Section>
             )}
 
+            <Section title="첨부 (사진·파일)">
+              <AttachmentManager
+                target="asset"
+                targetId={asset.id}
+                context="register"
+                readOnly={!isAuthed}
+              />
+            </Section>
+
             {asset.remark && (
               <Section title="Remark">
                 <div style={S.remark}>{asset.remark}</div>
@@ -207,6 +217,22 @@ export default function AssetDetail() {
                 </div>
               </div>
             </section>
+
+            {asset.name_en && (
+              <a
+                href={`/api/assets/report/${encodeURIComponent(asset.machine_asset_number)}`}
+                target="_blank"
+                rel="noopener"
+                style={{
+                  display: 'block', textAlign: 'center', marginTop: 16,
+                  background: '#2563eb', color: '#fff', padding: '14px',
+                  borderRadius: 10, fontSize: 15, fontWeight: 700,
+                  textDecoration: 'none', boxShadow: '0 4px 12px rgba(37,99,235,0.3)',
+                }}
+              >
+                📄 취득완료보고서 다운로드
+              </a>
+            )}
 
             <div style={S.actions}>
               {isAuthed ? (
