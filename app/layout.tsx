@@ -5,6 +5,7 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'DSC FMS Portal',
   description: 'DSC Mannur Facility Management System',
+  charset: 'utf-8',
 }
 
 export default function RootLayout({
