@@ -1,44 +1,96 @@
-import { NextRequest } from 'next/server';
-import { supabaseAdmin } from '../../../lib/travel/supabase-client';
-import { Travel, ApiResponse } from '../../../lib/travel/types';
-import { successResponse, errorResponse, getAuthToken, validateDateRange } from '../../../lib/travel/utils';
+// app/api/travels/route.ts
+// GET: 사용자의 여행 목록 조회
+// POST: 새 여행 생성
 
-export async function POST(request: NextRequest): Promise<Response> {
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { Travel, ApiResponse, ApiResponseList } from '@/types/travel';
+import { getUserTravels, validateTravelDates } from '@/lib/travel/service';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+export const dynamic = 'force-dynamic';
+
+// GET: 여행 목록 조회
+export async function GET(request: NextRequest) {
   try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
-
-    const { name, start_date, end_date, location, description } = await request.json();
-
-    // Validation
-    if (!name || !start_date || !end_date) {
-      return errorResponse('INVALID_INPUT', 'Missing required fields: name, start_date, end_date');
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated', status: 401 },
+        { status: 401 }
+      );
     }
 
-    if (!validateDateRange(start_date, end_date)) {
-      return errorResponse('INVALID_DATE', 'End date must be after or equal to start date');
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status') as 'upcoming' | 'ongoing' | 'completed' | null;
+    const sortBy = (searchParams.get('sort_by') as 'date' | 'cost' | 'name') || 'date';
+
+    const travels = await getUserTravels(
+      supabase,
+      userId,
+      status || undefined,
+      sortBy
+    );
+
+    const response: ApiResponseList<Travel> = {
+      data: travels,
+      status: 200,
+    };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error fetching travels:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch travels', status: 500 },
+      { status: 500 }
+    );
+  }
+}
+
+// POST: 새 여행 생성
+export async function POST(request: NextRequest) {
+  try {
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated', status: 401 },
+        { status: 401 }
+      );
     }
 
-    // Get user from token
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
+    const body = await request.json();
+    const { name, description, start_date, end_date, location } = body;
 
-    if (userError || !user) {
-      return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
+    // Validate required fields
+    if (!name || !start_date || !end_date || !location) {
+      return NextResponse.json(
+        { error: 'name, start_date, end_date, and location are required', status: 400 },
+        { status: 400 }
+      );
+    }
+
+    // Validate date range
+    const dateValidation = validateTravelDates(start_date, end_date);
+    if (!dateValidation.valid) {
+      return NextResponse.json(
+        { error: dateValidation.error, status: 400 },
+        { status: 400 }
+      );
     }
 
     // Create travel
-    const { data: travel, error: travelError } = await supabaseAdmin
+    const { data: travel, error: travelError } = await supabase
       .from('travels')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         name,
+        description: description || null,
         start_date,
         end_date,
         location,
-        description,
         status: 'upcoming',
       })
       .select()
@@ -46,83 +98,53 @@ export async function POST(request: NextRequest): Promise<Response> {
 
     if (travelError) throw travelError;
 
-    // Add creator as organizer member
-    const { error: memberError } = await supabaseAdmin.from('travel_members').insert({
-      travel_id: travel.id,
-      user_id: user.id,
-      role: 'organizer',
-      permission: 'read_write',
-    });
+    // Add organizer as member
+    const { error: memberError } = await supabase
+      .from('travel_members')
+      .insert({
+        travel_id: travel.id,
+        user_id: userId,
+        role: 'organizer',
+        permission: 'read_write',
+      });
 
     if (memberError) throw memberError;
 
     // Create default notification rules
     const defaultRules = [
-      { rule_type: 'days_before_departure', rule_config: { days: 7, channels: ['in_app', 'email'] } },
-      { rule_type: 'days_before_departure', rule_config: { days: 1, channels: ['in_app', 'email'] } },
-      { rule_type: 'days_before_departure', rule_config: { days: 0, hours: 24, channels: ['in_app', 'email'] } },
+      {
+        travel_id: travel.id,
+        rule_type: 'travel_starting_soon',
+        rule_config: { days_before: 7 },
+        is_enabled: true,
+      },
+      {
+        travel_id: travel.id,
+        rule_type: 'travel_started',
+        rule_config: {},
+        is_enabled: true,
+      },
+      {
+        travel_id: travel.id,
+        rule_type: 'travel_ended',
+        rule_config: {},
+        is_enabled: true,
+      },
     ];
 
-    await supabaseAdmin.from('travel_notification_rules').insert(
-      defaultRules.map((rule) => ({
-        travel_id: travel.id,
-        ...rule,
-        is_enabled: true,
-      }))
+    await supabase.from('travel_notification_rules').insert(defaultRules);
+
+    const response: ApiResponse<Travel> = {
+      data: travel as Travel,
+      message: 'Travel created successfully',
+      status: 201,
+    };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error creating travel:', error);
+    return NextResponse.json(
+      { error: 'Failed to create travel', status: 500 },
+      { status: 500 }
     );
-
-    return successResponse(travel, 'Travel created successfully', 201);
-  } catch (err) {
-    console.error('POST /api/travels error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to create travel', err, 500);
-  }
-}
-
-export async function GET(request: NextRequest): Promise<Response> {
-  try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
-
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
-    const sortBy = searchParams.get('sortBy') || 'start_date';
-    const order = searchParams.get('order') || 'asc';
-
-    // Get user from token
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-    }
-
-    // Query: travels where user is creator or member
-    let query = supabaseAdmin
-      .from('travels')
-      .select(
-        `
-        *,
-        travel_members(count),
-        travel_costs(amount)
-      `
-      )
-      .or(`user_id.eq.${user.id},travel_members.user_id.eq.${user.id}`);
-
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    query = query.order(sortBy, { ascending: order === 'asc' });
-
-    const { data: travels, error } = await query;
-
-    if (error) throw error;
-
-    return successResponse(travels, 'Travels retrieved successfully');
-  } catch (err) {
-    console.error('GET /api/travels error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to retrieve travels', err, 500);
   }
 }

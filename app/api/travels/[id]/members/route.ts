@@ -1,258 +1,164 @@
-import { NextRequest } from 'next/server';
-import { supabaseAdmin } from '../../../../../lib/travel/supabase-client';
-import { successResponse, errorResponse, getAuthToken, validateEmail } from '../../../../../lib/travel/utils';
+// app/api/travels/[id]/members/route.ts
+// POST: 멤버 추가
+// DELETE: 멤버 제거
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }): Promise<Response> {
-  try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { TravelMember, ApiResponse } from '@/types/travel';
 
-    const { id } = params;
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-    }
-
-    // Check member access
-    const { data: member } = await supabaseAdmin
-      .from('travel_members')
-      .select('*')
-      .eq('travel_id', id)
-      .eq('user_id', user.id)
-      .single();
-
-    if (!member) {
-      return errorResponse('FORBIDDEN', 'You do not have access to this travel', null, 403);
-    }
-
-    const { data: members, error } = await supabaseAdmin
-      .from('travel_members')
-      .select('*')
-      .eq('travel_id', id)
-      .order('joined_at', { ascending: true });
-
-    if (error) throw error;
-
-    return successResponse(members, 'Members retrieved successfully');
-  } catch (err) {
-    console.error('GET /api/travels/[id]/members error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to retrieve members', err, 500);
-  }
+interface RouteParams {
+  params: {
+    id: string;
+  };
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }): Promise<Response> {
+export const dynamic = 'force-dynamic';
+
+// POST: 멤버 추가
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated', status: 401 },
+        { status: 401 }
+      );
+    }
 
     const { id } = params;
-    const { email, role, permission } = await request.json();
+    const body = await request.json();
+    const { user_id, role = 'companion', permission = 'read_write' } = body;
 
-    if (!email || !role || !permission) {
-      return errorResponse('INVALID_INPUT', 'Missing required fields: email, role, permission');
+    if (!user_id) {
+      return NextResponse.json(
+        { error: 'user_id is required', status: 400 },
+        { status: 400 }
+      );
     }
 
-    if (!validateEmail(email)) {
-      return errorResponse('INVALID_EMAIL', 'Invalid email address');
-    }
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-    }
-
-    // Check if user is organizer (has write permission)
-    const { data: member } = await supabaseAdmin
-      .from('travel_members')
-      .select('permission, role')
-      .eq('travel_id', id)
-      .eq('user_id', user.id)
+    // Verify user is organizer
+    const { data: travel, error: fetchError } = await supabase
+      .from('travels')
+      .select('user_id')
+      .eq('id', id)
       .single();
 
-    if (!member || member.permission !== 'read_write' || member.role !== 'organizer') {
-      return errorResponse('FORBIDDEN', 'Only organizer can invite members', null, 403);
+    if (fetchError || !travel) {
+      return NextResponse.json(
+        { error: 'Travel not found', status: 404 },
+        { status: 404 }
+      );
     }
 
-    // Find user by email using admin API
-    const { data, error: userSearchError } = await supabaseAdmin.auth.admin.listUsers();
-
-    if (userSearchError) throw userSearchError;
-
-    const existingUsers = data?.users || [];
-    const invitedUser = existingUsers.find((u: any) => u.email === email);
-
-    if (!invitedUser) {
-      return errorResponse('USER_NOT_FOUND', 'User with this email does not exist');
+    if (travel.user_id !== userId) {
+      return NextResponse.json(
+        { error: 'Only organizer can add members', status: 403 },
+        { status: 403 }
+      );
     }
 
-    // Check if already a member
-    const { data: existingMember } = await supabaseAdmin
+    // Check if member already exists
+    const { data: existing } = await supabase
       .from('travel_members')
       .select('id')
       .eq('travel_id', id)
-      .eq('user_id', invitedUser.id)
+      .eq('user_id', user_id)
       .single();
 
-    if (existingMember) {
-      return errorResponse('ALREADY_MEMBER', 'User is already a member of this travel');
+    if (existing) {
+      return NextResponse.json(
+        { error: 'User is already a member', status: 400 },
+        { status: 400 }
+      );
     }
 
     // Add member
-    const { data: newMember, error } = await supabaseAdmin
+    const { data: member, error: memberError } = await supabase
       .from('travel_members')
       .insert({
         travel_id: id,
-        user_id: invitedUser.id,
+        user_id,
         role,
         permission,
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (memberError) throw memberError;
 
-    return successResponse(newMember, 'Member added successfully', 201);
-  } catch (err) {
-    console.error('POST /api/travels/[id]/members error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to add member', err, 500);
+    const response: ApiResponse<TravelMember> = {
+      data: member as TravelMember,
+      message: 'Member added successfully',
+      status: 201,
+    };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error adding member:', error);
+    return NextResponse.json(
+      { error: 'Failed to add member', status: 500 },
+      { status: 500 }
+    );
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }): Promise<Response> {
+// DELETE: 멤버 제거
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated', status: 401 },
+        { status: 401 }
+      );
+    }
 
     const { id } = params;
-    const { memberId, role, permission } = await request.json();
+    const memberId = request.headers.get('x-member-id');
 
     if (!memberId) {
-      return errorResponse('INVALID_INPUT', 'Missing required field: memberId');
+      return NextResponse.json(
+        { error: 'member_id is required', status: 400 },
+        { status: 400 }
+      );
     }
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-    }
-
-    // Check if user is organizer
-    const { data: currentMember } = await supabaseAdmin
-      .from('travel_members')
-      .select('permission, role')
-      .eq('travel_id', id)
-      .eq('user_id', user.id)
+    // Verify user is organizer
+    const { data: travel } = await supabase
+      .from('travels')
+      .select('user_id')
+      .eq('id', id)
       .single();
 
-    if (!currentMember || currentMember.permission !== 'read_write' || currentMember.role !== 'organizer') {
-      return errorResponse('FORBIDDEN', 'Only organizer can update members', null, 403);
+    if (travel?.user_id !== userId) {
+      return NextResponse.json(
+        { error: 'Only organizer can remove members', status: 403 },
+        { status: 403 }
+      );
     }
 
-    // Verify member exists in travel
-    const { data: targetMember } = await supabaseAdmin
-      .from('travel_members')
-      .select('id')
-      .eq('id', memberId)
-      .eq('travel_id', id)
-      .single();
-
-    if (!targetMember) {
-      return errorResponse('NOT_FOUND', 'Member not found', null, 404);
-    }
-
-    const updateData: Record<string, unknown> = {};
-    if (role !== undefined) updateData.role = role;
-    if (permission !== undefined) updateData.permission = permission;
-
-    const { data: updated, error } = await supabaseAdmin
-      .from('travel_members')
-      .update(updateData)
-      .eq('id', memberId)
-      .eq('travel_id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return successResponse(updated, 'Member updated successfully');
-  } catch (err) {
-    console.error('PATCH /api/travels/[id]/members error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to update member', err, 500);
-  }
-}
-
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }): Promise<Response> {
-  try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
-
-    const { id } = params;
-    const { memberId } = await request.json();
-
-    if (!memberId) {
-      return errorResponse('INVALID_INPUT', 'Missing required field: memberId');
-    }
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-    }
-
-    // Check if user is organizer
-    const { data: currentMember } = await supabaseAdmin
-      .from('travel_members')
-      .select('permission, role')
-      .eq('travel_id', id)
-      .eq('user_id', user.id)
-      .single();
-
-    if (!currentMember || currentMember.permission !== 'read_write' || currentMember.role !== 'organizer') {
-      return errorResponse('FORBIDDEN', 'Only organizer can remove members', null, 403);
-    }
-
-    // Verify member exists and is not the organizer
-    const { data: targetMember } = await supabaseAdmin
-      .from('travel_members')
-      .select('id, role')
-      .eq('id', memberId)
-      .eq('travel_id', id)
-      .single();
-
-    if (!targetMember) {
-      return errorResponse('NOT_FOUND', 'Member not found', null, 404);
-    }
-
-    if (targetMember.role === 'organizer') {
-      return errorResponse('CANNOT_REMOVE_ORGANIZER', 'Cannot remove travel organizer');
-    }
-
-    const { error } = await supabaseAdmin
+    // Remove member
+    const { error: deleteError } = await supabase
       .from('travel_members')
       .delete()
       .eq('id', memberId)
       .eq('travel_id', id);
 
-    if (error) throw error;
+    if (deleteError) throw deleteError;
 
-    return successResponse({ memberId }, 'Member removed successfully');
-  } catch (err) {
-    console.error('DELETE /api/travels/[id]/members error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to remove member', err, 500);
+    return NextResponse.json({
+      message: 'Member removed successfully',
+      status: 200,
+    });
+  } catch (error) {
+    console.error('Error removing member:', error);
+    return NextResponse.json(
+      { error: 'Failed to remove member', status: 500 },
+      { status: 500 }
+    );
   }
 }

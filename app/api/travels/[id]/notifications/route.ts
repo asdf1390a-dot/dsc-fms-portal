@@ -1,141 +1,73 @@
-import { NextRequest } from 'next/server';
-import { supabaseAdmin } from '../../../../../lib/travel/supabase-client';
-import { successResponse, errorResponse, getAuthToken } from '../../../../../lib/travel/utils';
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+async function checkAccess(userId: string, travelId: string): Promise<boolean> {
+  const { data: travel } = await supabase
+    .from('travels')
+    .select('user_id')
+    .eq('id', travelId)
+    .single();
+  if (!travel) return false;
+  if (travel.user_id === userId) return true;
+  const { data: member } = await supabase
+    .from('travel_members')
+    .select('id')
+    .eq('travel_id', travelId)
+    .eq('user_id', userId)
+    .single();
+  return !!member;
+}
+
+interface RouteParams { params: { id: string } }
+
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
-
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-
-    const { data: members } = await supabaseAdmin
-      .from('travel_members')
-      .select('user_id')
-      .eq('travel_id', params.id);
-
-    const { data: travel } = await supabaseAdmin
-      .from('travels')
-      .select('user_id')
-      .eq('id', params.id)
-      .single();
-
-    const isMember = travel?.user_id === user.id || members?.some(m => m.user_id === user.id);
-    if (!isMember) {
-      return errorResponse('FORBIDDEN', 'You do not have access to this travel', null, 403);
+    const userId = request.headers.get('x-user-id');
+    if (!userId || !(await checkAccess(userId, params.id))) {
+      return NextResponse.json({ error: 'Access denied', status: 403 }, { status: 403 });
     }
-
-    const { data: rules, error } = await supabaseAdmin
-      .from('travel_notification_rules')
+    const { data, error } = await supabase
+      .from('travel_notifications')
       .select('*')
       .eq('travel_id', params.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false });
-
-    if (error) {
-      return errorResponse('FETCH_FAILED', 'Failed to fetch notification rules', error, 500);
-    }
-
-    return successResponse(rules || [], 'Notification rules retrieved successfully');
-  } catch (err) {
-    console.error('GET /api/travels/[id]/notifications error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to retrieve notification rules', err, 500);
+    if (error) throw error;
+    return NextResponse.json({ data, status: 200 });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch notifications', status: 500 }, { status: 500 });
   }
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
-
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-
-    const { data: member } = await supabaseAdmin
-      .from('travel_members')
-      .select('role')
-      .eq('travel_id', params.id)
-      .eq('user_id', user.id)
-      .single();
-
-    if (!member || member.role !== 'organizer') {
-      return errorResponse('FORBIDDEN', 'Only organizers can modify notification rules', null, 403);
+    const userId = request.headers.get('x-user-id');
+    if (!userId || !(await checkAccess(userId, params.id))) {
+      return NextResponse.json({ error: 'Access denied', status: 403 }, { status: 403 });
     }
-
-    const body = await request.json();
-    const { ruleId, is_enabled } = body;
-
-    if (!ruleId) {
-      return errorResponse('INVALID_INPUT', 'Missing ruleId');
-    }
-
-    const { data: updated, error } = await supabaseAdmin
-      .from('travel_notification_rules')
-      .update({ is_enabled })
-      .eq('id', ruleId)
-      .eq('travel_id', params.id)
+    const { title, message, channels } = await request.json();
+    const { data, error } = await supabase
+      .from('travel_notifications')
+      .insert({
+        travel_id: params.id,
+        user_id: userId,
+        notification_type: 'custom',
+        title,
+        message,
+        channels,
+      })
       .select()
       .single();
-
-    if (error || !updated) {
-      return errorResponse('UPDATE_FAILED', 'Failed to update notification rule', error, 500);
-    }
-
-    return successResponse(updated, 'Notification rule updated successfully');
-  } catch (err) {
-    console.error('PATCH /api/travels/[id]/notifications error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to update notification rule', err, 500);
-  }
-}
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
-
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-
-    const { data: member } = await supabaseAdmin
-      .from('travel_members')
-      .select('role')
-      .eq('travel_id', params.id)
-      .eq('user_id', user.id)
-      .single();
-
-    if (!member || member.role !== 'organizer') {
-      return errorResponse('FORBIDDEN', 'Only organizers can delete notification rules', null, 403);
-    }
-
-    const body = await request.json();
-    const { ruleId } = body;
-
-    if (!ruleId) {
-      return errorResponse('INVALID_INPUT', 'Missing ruleId');
-    }
-
-    const { error } = await supabaseAdmin
-      .from('travel_notification_rules')
-      .delete()
-      .eq('id', ruleId)
-      .eq('travel_id', params.id);
-
-    if (error) {
-      return errorResponse('DELETE_FAILED', 'Failed to delete notification rule', error, 500);
-    }
-
-    return successResponse(null, 'Notification rule deleted successfully');
-  } catch (err) {
-    console.error('DELETE /api/travels/[id]/notifications error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to delete notification rule', err, 500);
+    if (error) throw error;
+    return NextResponse.json({ data, message: 'Notification created', status: 201 }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to create notification', status: 500 }, { status: 500 });
   }
 }

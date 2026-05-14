@@ -1,103 +1,288 @@
-import { NextRequest } from 'next/server';
-import { supabaseAdmin } from '../../../../../lib/travel/supabase-client';
-import { successResponse, errorResponse, getAuthToken, validateDateRange } from '../../../../../lib/travel/utils';
+// app/api/travels/[id]/events/route.ts
+// POST: 이벤트 추가
+// GET: 이벤트 목록 조회 (날짜순 정렬)
+// PUT: 이벤트 수정
+// DELETE: 이벤트 삭제
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+import { TravelEvent, ApiResponse, ApiResponseList } from '@/types/travel';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
+interface RouteParams {
+  params: {
+    id: string;
+  };
+}
+
+export const dynamic = 'force-dynamic';
+
+// Helper: Check if user has write permission
+async function checkWritePermission(
+  userId: string,
+  travelId: string
+): Promise<boolean> {
+  const { data: travel } = await supabase
+    .from('travels')
+    .select('user_id')
+    .eq('id', travelId)
+    .single();
+
+  if (travel?.user_id === userId) return true;
+
+  const { data: member } = await supabase
+    .from('travel_members')
+    .select('permission')
+    .eq('travel_id', travelId)
+    .eq('user_id', userId)
+    .single();
+
+  return member?.permission === 'read_write';
+}
+
+// Helper: Check if user has access
+async function checkAccess(userId: string, travelId: string): Promise<boolean> {
+  const { data: travel } = await supabase
+    .from('travels')
+    .select('user_id')
+    .eq('id', travelId)
+    .single();
+
+  if (!travel) return false;
+  if (travel.user_id === userId) return true;
+
+  const { data: member } = await supabase
+    .from('travel_members')
+    .select('id')
+    .eq('travel_id', travelId)
+    .eq('user_id', userId)
+    .single();
+
+  return !!member;
+}
+
+// GET: 이벤트 목록
+export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
-
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
-
-    const { data: members } = await supabaseAdmin
-      .from('travel_members')
-      .select('user_id')
-      .eq('travel_id', params.id);
-
-    const { data: travel } = await supabaseAdmin
-      .from('travels')
-      .select('user_id')
-      .eq('id', params.id)
-      .single();
-
-    const isMember = travel?.user_id === user.id || members?.some(m => m.user_id === user.id);
-    if (!isMember) {
-      return errorResponse('FORBIDDEN', 'You do not have access to this travel', null, 403);
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated', status: 401 },
+        { status: 401 }
+      );
     }
 
-    const { data: events, error } = await supabaseAdmin
+    const { id } = params;
+
+    // Check access
+    if (!(await checkAccess(userId, id))) {
+      return NextResponse.json(
+        { error: 'Access denied', status: 403 },
+        { status: 403 }
+      );
+    }
+
+    const { data: events, error } = await supabase
       .from('travel_events')
       .select('*')
-      .eq('travel_id', params.id)
-      .order('event_date', { ascending: true });
+      .eq('travel_id', id)
+      .order('event_date', { ascending: true })
+      .order('event_time', { ascending: true });
 
-    if (error) {
-      return errorResponse('FETCH_FAILED', 'Failed to fetch events', error, 500);
-    }
+    if (error) throw error;
 
-    return successResponse(events || [], 'Events retrieved successfully');
-  } catch (err) {
-    console.error('GET /api/travels/[id]/events error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to retrieve events', err, 500);
+    const response: ApiResponseList<TravelEvent> = {
+      data: events as TravelEvent[],
+      status: 200,
+    };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch events', status: 500 },
+      { status: 500 }
+    );
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// POST: 이벤트 추가
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const token = getAuthToken(request);
-    if (!token) return errorResponse('UNAUTHORIZED', 'Missing authorization token', null, 401);
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated', status: 401 },
+        { status: 401 }
+      );
+    }
 
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) return errorResponse('AUTH_ERROR', 'Failed to authenticate user', null, 401);
+    const { id } = params;
 
-    const { data: member } = await supabaseAdmin
-      .from('travel_members')
-      .select('permission')
-      .eq('travel_id', params.id)
-      .eq('user_id', user.id)
-      .single();
-
-    if (!member || member.permission !== 'read_write') {
-      return errorResponse('FORBIDDEN', 'You do not have permission to add events', null, 403);
+    // Check write permission
+    if (!(await checkWritePermission(userId, id))) {
+      return NextResponse.json(
+        { error: 'You do not have write permission', status: 403 },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();
-    const { title, event_type, event_date, event_time, location, description, details, status } = body;
+    const {
+      title,
+      event_type,
+      event_date,
+      event_time,
+      location,
+      description,
+      details,
+    } = body;
 
     if (!title || !event_type || !event_date) {
-      return errorResponse('INVALID_INPUT', 'Missing required fields: title, event_type, event_date');
+      return NextResponse.json(
+        { error: 'Missing required fields', status: 400 },
+        { status: 400 }
+      );
     }
 
-    const { data: event, error } = await supabaseAdmin
+    const { data: event, error } = await supabase
       .from('travel_events')
       .insert({
-        travel_id: params.id,
+        travel_id: id,
         title,
         event_type,
         event_date,
         event_time: event_time || null,
         location: location || null,
         description: description || null,
-        details: details || null,
-        status: status || 'planned',
+        details: details || {},
+        status: 'planned',
       })
       .select()
       .single();
 
-    if (error) {
-      return errorResponse('CREATE_FAILED', 'Failed to create event', error, 500);
+    if (error) throw error;
+
+    const response: ApiResponse<TravelEvent> = {
+      data: event as TravelEvent,
+      message: 'Event created successfully',
+      status: 201,
+    };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error creating event:', error);
+    return NextResponse.json(
+      { error: 'Failed to create event', status: 500 },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT: 이벤트 수정
+export async function PUT(request: NextRequest, { params }: RouteParams) {
+  try {
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated', status: 401 },
+        { status: 401 }
+      );
     }
 
-    return successResponse(event, 'Event created successfully', 201);
-  } catch (err) {
-    console.error('POST /api/travels/[id]/events error:', err);
-    return errorResponse('SERVER_ERROR', 'Failed to create event', err, 500);
+    const { id } = params;
+    const eventId = request.headers.get('x-event-id');
+
+    if (!eventId) {
+      return NextResponse.json(
+        { error: 'event_id is required', status: 400 },
+        { status: 400 }
+      );
+    }
+
+    // Check write permission
+    if (!(await checkWritePermission(userId, id))) {
+      return NextResponse.json(
+        { error: 'You do not have write permission', status: 403 },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+
+    const { data: event, error } = await supabase
+      .from('travel_events')
+      .update(body)
+      .eq('id', eventId)
+      .eq('travel_id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const response: ApiResponse<TravelEvent> = {
+      data: event as TravelEvent,
+      message: 'Event updated successfully',
+      status: 200,
+    };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error updating event:', error);
+    return NextResponse.json(
+      { error: 'Failed to update event', status: 500 },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE: 이벤트 삭제
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
+  try {
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated', status: 401 },
+        { status: 401 }
+      );
+    }
+
+    const { id } = params;
+    const eventId = request.headers.get('x-event-id');
+
+    if (!eventId) {
+      return NextResponse.json(
+        { error: 'event_id is required', status: 400 },
+        { status: 400 }
+      );
+    }
+
+    // Check write permission
+    if (!(await checkWritePermission(userId, id))) {
+      return NextResponse.json(
+        { error: 'You do not have write permission', status: 403 },
+        { status: 403 }
+      );
+    }
+
+    const { error } = await supabase
+      .from('travel_events')
+      .delete()
+      .eq('id', eventId)
+      .eq('travel_id', id);
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      message: 'Event deleted successfully',
+      status: 200,
+    });
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete event', status: 500 },
+      { status: 500 }
+    );
   }
 }
