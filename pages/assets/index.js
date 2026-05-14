@@ -41,6 +41,8 @@ export default function AssetsPage() {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('all');
   const [status, setStatus] = useState('all');
+  const [pmStatusMap, setPmStatusMap] = useState({}); // asset_id → 'completed'|'pending'|'overdue'|null
+  const [bmStatusMap, setBmStatusMap] = useState({}); // asset_id → 'open'|null
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +89,46 @@ export default function AssetsPage() {
       setClasses(c.data || []);
       setCategories(cats.data || []);
       setLoading(false);
+
+      // Lightweight async fetch of PM/BM status indicators.
+      // 실패시 무시 — 리스트 표시에는 영향 없음.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      Promise.all([
+        supabase.from('pm_schedules')
+          .select('asset_id, status, scheduled_date')
+          .in('status', ['pending', 'in_progress', 'completed'])
+          .gte('scheduled_date', new Date(Date.now() - 90*86400*1000).toISOString().slice(0, 10))
+          .limit(5000),
+        supabase.from('bm_events')
+          .select('asset_id, status')
+          .in('status', ['open', 'in_progress', 'pending_parts'])
+          .limit(2000),
+      ]).then(([pmRes, bmRes]) => {
+        if (cancelled) return;
+        const pm = {};
+        for (const r of (pmRes.data || [])) {
+          if (!r.asset_id) continue;
+          const cur = pm[r.asset_id];
+          // priority: overdue > pending > completed
+          let lvl = 0;
+          if (r.status === 'pending' && r.scheduled_date < todayStr) lvl = 3; // overdue
+          else if (r.status === 'pending' || r.status === 'in_progress') lvl = 2;
+          else if (r.status === 'completed') lvl = 1;
+          if (!cur || lvl > cur.lvl) {
+            const tag = lvl === 3 ? 'overdue' : lvl === 2 ? 'pending' : 'completed';
+            pm[r.asset_id] = { lvl, tag };
+          }
+        }
+        const pmFlat = {};
+        Object.entries(pm).forEach(([k, v]) => { pmFlat[k] = v.tag; });
+        const bm = {};
+        for (const r of (bmRes.data || [])) {
+          if (!r.asset_id) continue;
+          bm[r.asset_id] = 'open';
+        }
+        setPmStatusMap(pmFlat);
+        setBmStatusMap(bm);
+      }).catch(() => {});
     })();
     return () => { cancelled = true; };
   }, []);
@@ -206,7 +248,10 @@ export default function AssetsPage() {
                     <span style={S.tag}>{a.machine_asset_number}</span>
                     <span style={S.tagSub}>{a.machine_asset_code}</span>
                   </div>
-                  <StatusBadge status={a.status} />
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <PmBmBadge pm={pmStatusMap[a.id]} bm={bmStatusMap[a.id]} />
+                    <StatusBadge status={a.status} />
+                  </div>
                 </div>
 
                 <div style={S.name}>
@@ -242,6 +287,51 @@ function Chip({ active, onClick, children }) {
       {children}
     </button>
   );
+}
+
+function PmBmBadge({ pm, bm }) {
+  // BM 우선 — 진행중 고장이 있으면 빨강 표시
+  if (bm === 'open') {
+    return (
+      <span style={{
+        backgroundColor: '#fee2e2', color: '#991b1b',
+        padding: '4px 8px', borderRadius: 8,
+        fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+        whiteSpace: 'nowrap',
+      }} title="BM 진행중">🔴 BM</span>
+    );
+  }
+  if (pm === 'overdue') {
+    return (
+      <span style={{
+        backgroundColor: '#fee2e2', color: '#991b1b',
+        padding: '4px 8px', borderRadius: 8,
+        fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+        whiteSpace: 'nowrap',
+      }} title="PM 연체">❌ PM</span>
+    );
+  }
+  if (pm === 'pending') {
+    return (
+      <span style={{
+        backgroundColor: '#fef3c7', color: '#92400e',
+        padding: '4px 8px', borderRadius: 8,
+        fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+        whiteSpace: 'nowrap',
+      }} title="PM 예정">⏱ PM</span>
+    );
+  }
+  if (pm === 'completed') {
+    return (
+      <span style={{
+        backgroundColor: '#dcfce7', color: '#166534',
+        padding: '4px 8px', borderRadius: 8,
+        fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+        whiteSpace: 'nowrap',
+      }} title="PM 완료">✓ PM</span>
+    );
+  }
+  return null;
 }
 
 function StatusBadge({ status }) {
