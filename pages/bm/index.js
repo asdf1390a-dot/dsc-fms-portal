@@ -1,6 +1,6 @@
 import Head from 'next/head';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
 import BottomNav from '../../components/BottomNav';
@@ -23,27 +23,27 @@ const SEVERITY_TO_PRIORITY = {
 
 // ── Severity pill (dark theme) ───────────────────────────────────────
 const SEVERITY_PILL = {
-  line_down: { bg: 'rgba(220,38,38,0.18)',  fg: '#fca5a5', border: 'rgba(220,38,38,0.6)',  label: 'LINE DOWN' },
-  major:     { bg: 'rgba(249,115,22,0.18)', fg: '#fdba74', border: 'rgba(249,115,22,0.6)', label: 'MAJOR' },
-  normal:    { bg: 'rgba(37,99,235,0.18)',  fg: '#93c5fd', border: 'rgba(37,99,235,0.6)',  label: 'NORMAL' },
-  minor:     { bg: 'rgba(100,116,139,0.2)', fg: '#cbd5e1', border: 'rgba(100,116,139,0.6)', label: 'MINOR' },
+  line_down: { bg: 'rgba(220,38,38,0.18)',  fg: '#fca5a5', border: 'rgba(220,38,38,0.6)',  label: '라인다운' },
+  major:     { bg: 'rgba(249,115,22,0.18)', fg: '#fdba74', border: 'rgba(249,115,22,0.6)', label: '주요' },
+  normal:    { bg: 'rgba(37,99,235,0.18)',  fg: '#93c5fd', border: 'rgba(37,99,235,0.6)',  label: '정상' },
+  minor:     { bg: 'rgba(100,116,139,0.2)', fg: '#cbd5e1', border: 'rgba(100,116,139,0.6)', label: '경미' },
 };
 
 // ── Status pill (dark theme) ─────────────────────────────────────────
 const STATUS_PILL = {
-  open:          { bg: 'rgba(220,38,38,0.18)',  fg: '#fca5a5', border: 'rgba(220,38,38,0.6)',  label: 'OPEN' },
-  in_progress:   { bg: 'rgba(249,115,22,0.18)', fg: '#fdba74', border: 'rgba(249,115,22,0.6)', label: 'IN PROGRESS' },
-  pending_parts: { bg: 'rgba(234,179,8,0.18)',  fg: '#fde68a', border: 'rgba(234,179,8,0.6)',  label: 'WAIT PARTS' },
-  resolved:      { bg: 'rgba(34,197,94,0.18)',  fg: '#86efac', border: 'rgba(34,197,94,0.6)',  label: 'RESOLVED' },
-  wontfix:       { bg: 'rgba(100,116,139,0.2)', fg: '#cbd5e1', border: 'rgba(100,116,139,0.6)', label: "WON'T FIX" },
+  open:          { bg: 'rgba(220,38,38,0.18)',  fg: '#fca5a5', border: 'rgba(220,38,38,0.6)',  label: '접수' },
+  in_progress:   { bg: 'rgba(249,115,22,0.18)', fg: '#fdba74', border: 'rgba(249,115,22,0.6)', label: '진행중' },
+  pending_parts: { bg: 'rgba(234,179,8,0.18)',  fg: '#fde68a', border: 'rgba(234,179,8,0.6)',  label: '부품대기' },
+  resolved:      { bg: 'rgba(34,197,94,0.18)',  fg: '#86efac', border: 'rgba(34,197,94,0.6)',  label: '완료' },
+  wontfix:       { bg: 'rgba(100,116,139,0.2)', fg: '#cbd5e1', border: 'rgba(100,116,139,0.6)', label: '미처리' },
 };
 
 // ── Filter tabs ──────────────────────────────────────────────────────
 const FILTERS = [
-  { key: 'open',        label: 'OPEN' },
-  { key: 'in_progress', label: 'IN PROGRESS' },
-  { key: 'all',         label: 'ALL' },
-  { key: 'resolved',    label: 'RESOLVED' },
+  { key: 'open',        label: '접수' },
+  { key: 'in_progress', label: '진행중' },
+  { key: 'all',         label: '전체' },
+  { key: 'resolved',    label: '완료' },
 ];
 
 function relativeTime(iso) {
@@ -52,16 +52,16 @@ function relativeTime(iso) {
   if (isNaN(then)) return '';
   const diff = Date.now() - then;
   const s = Math.floor(diff / 1000);
-  if (s < 60)    return `${s}s ago`;
+  if (s < 60)    return `${s}초 전`;
   const m = Math.floor(s / 60);
-  if (m < 60)    return `${m}m ago`;
+  if (m < 60)    return `${m}분 전`;
   const h = Math.floor(m / 60);
-  if (h < 24)    return `${h}h ago`;
+  if (h < 24)    return `${h}시간 전`;
   const d = Math.floor(h / 24);
-  if (d < 7)     return `${d}d ago`;
+  if (d < 7)     return `${d}일 전`;
   const w = Math.floor(d / 7);
-  if (w < 5)     return `${w}w ago`;
-  return new Date(iso).toLocaleDateString();
+  if (w < 5)     return `${w}주 전`;
+  return new Date(iso).toLocaleDateString('ko-KR');
 }
 
 function formatDate(iso) {
@@ -79,6 +79,8 @@ export default function BMListPage() {
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('open');
   const [search, setSearch] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +97,18 @@ export default function BMListPage() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowMenu(false);
+      }
+    }
+    if (showMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showMenu]);
 
   // ── Counts per tab ───────────────────────────────────────────────
   const counts = useMemo(() => ({
@@ -136,19 +150,37 @@ export default function BMListPage() {
       <main style={S.page}>
         {/* ── Sticky header ───────────────────────────────────────── */}
         <header style={S.header}>
-          <Link href="/" style={S.backLink} aria-label="Home">← Home</Link>
+          <Link href="/" style={S.backLink} aria-label="홈">← 홈</Link>
           <h1 style={S.title}>BM 이력</h1>
           <div style={S.headerRight}>
             {isAuthed ? (
-              <button onClick={signOut} style={S.userChip} title={fullName || 'logged in'}>
+              <button onClick={signOut} style={S.userChip} title={fullName || '로그인됨'}>
                 {employeeId || '✓'}
               </button>
             ) : (
-              <Link href="/login" style={S.loginLink}>Sign in</Link>
+              <Link href="/login" style={S.loginLink}>로그인</Link>
             )}
-            <Link href="/bm/new" style={S.fab} aria-label="Report breakdown">
-              <span style={S.fabPlus}>+</span>
-            </Link>
+            {/* Menu button */}
+            <div style={{ position: 'relative' }} ref={menuRef}>
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                style={S.menuBtn}
+                title="더 보기"
+                aria-label="메뉴"
+              >
+                ⋮
+              </button>
+              {showMenu && (
+                <div style={S.dropdown}>
+                  <Link href="/bm/new" style={S.dropdownItem}>
+                    + 신규 고장 신고
+                  </Link>
+                  <Link href="/bm/import" style={S.dropdownItem}>
+                    📥 Excel 임포트
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -202,7 +234,7 @@ export default function BMListPage() {
               type="button"
               onClick={() => setSearch('')}
               style={S.searchClear}
-              aria-label="Clear search"
+              aria-label="검색 초기화"
             >×</button>
           )}
         </div>
@@ -212,7 +244,7 @@ export default function BMListPage() {
           <div style={S.errorBox}>
             {error}
             <div style={{ fontSize: 11, marginTop: 6, opacity: 0.8 }}>
-              Has `05_bm_schema.sql` been run in Supabase?
+              Supabase에서 `05_bm_schema.sql`을 실행했나요?
             </div>
           </div>
         )}
@@ -346,6 +378,26 @@ const S = {
     boxShadow: '0 4px 12px rgba(220,38,38,0.5)',
   },
   fabPlus: { fontSize: 28, lineHeight: 1, fontWeight: 300, marginTop: -2 },
+  menuBtn: {
+    width: 44, height: 44,
+    background: 'transparent', color: '#cbd5e1',
+    border: 'none', cursor: 'pointer', fontSize: 20, lineHeight: 1,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    borderRadius: 6,
+  },
+  dropdown: {
+    position: 'absolute', top: '100%', right: 0, marginTop: 4,
+    background: '#1e293b', border: '1px solid #334155', borderRadius: 8,
+    minWidth: 180, boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+    zIndex: 100, overflow: 'hidden',
+  },
+  dropdownItem: {
+    display: 'block', padding: '12px 14px',
+    color: '#e2e8f0', textDecoration: 'none',
+    fontSize: 14, borderBottom: '1px solid #334155',
+    transition: 'background 0.15s',
+    '&:hover': { background: '#334155' },
+  },
 
   // Tab bar
   tabBar: {
