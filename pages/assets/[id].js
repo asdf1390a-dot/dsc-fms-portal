@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
 import PhotoUploader from '../../components/PhotoUploader';
 import AttachmentManager from '../../components/AttachmentManager';
+import AssetHistoryTabs from '../../components/AssetHistoryTabs';
 
 const STATUS_STYLES = {
   active:      { bg: '#dcfce7', fg: '#166534', label: '가동' },
@@ -170,41 +171,9 @@ export default function AssetDetail() {
               <Field label="QR" value={asset.qr_payload} />
             </Section>
 
-            <Section title={`고장 이력${bmEvents.length ? ` (${bmEvents.length})` : ''}`}>
-              {isAuthed && (
-                <Link
-                  href={`/bm/new?asset=${encodeURIComponent(asset.machine_asset_number)}`}
-                  style={S.bmReportBtn}
-                >
-                  🚨 고장 신고
-                </Link>
-              )}
-              {bmEvents.length > 0 ? (
-                <ul style={S.bmList}>
-                  {bmEvents.map(e => (
-                    <li key={e.id}>
-                      <Link href={`/bm/${e.id}`} style={S.bmItem}>
-                        <span style={{
-                          ...S.bmStatus,
-                          background: ['open', 'in_progress', 'pending_parts'].includes(e.status) ? '#fee2e2' : '#dcfce7',
-                          color: ['open', 'in_progress', 'pending_parts'].includes(e.status) ? '#991b1b' : '#166534',
-                        }}>
-                          {e.status === 'in_progress' ? 'WIP' : e.status.toUpperCase().slice(0, 6)}
-                        </span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, color: '#334155' }}>{e.symptom.slice(0, 60)}{e.symptom.length > 60 ? '…' : ''}</div>
-                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                            {new Date(e.reported_at).toLocaleDateString()} · {e.severity}
-                          </div>
-                        </div>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              ) : !isAuthed ? (
-                <div style={{ fontSize: 13, color: '#94a3b8' }}>없음</div>
-              ) : null}
-            </Section>
+            <div style={{ marginTop: 16 }}>
+              <AssetHistoryTabs assetId={asset.id} />
+            </div>
 
             <section style={{ margin: '16px 0 0', background: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 }}>QR 코드</div>

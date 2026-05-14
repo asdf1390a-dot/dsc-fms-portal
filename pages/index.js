@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Head from "next/head";
 import BottomNav from "../components/BottomNav";
+import PmBmBadge from "../components/PmBmBadge";
 import { supabase } from "../lib/supabase";
 
 // ═══ Supabase row → UI 형식 매퍼 (DCMI 스키마 ↔ 기존 INIT_ASSETS 모양) ═══
@@ -18,6 +19,7 @@ const mapSupabaseAsset = (r) => {
   const stMap = { active: "Active", idle: "Idle-NR", idle_r: "Idle-R", idle_nr: "Idle-NR", fixed_sale: "Fixed-Sale" };
   const cat = r.asset_classes?.category_code || r?.extra?.major_code || (r.asset_class_code || "").split(".")[0] || "";
   return {
+    id: r.id || "",
     no: r.machine_asset_number || "",
     name: r.name_en || "",
     model: r.model || "",
@@ -635,7 +637,7 @@ function AssetMaster({t,extAssets,extLoading,extError}){
           </div>
           <div style={{overflowX:"auto",border:"0.5px solid #e0e0e0",borderRadius:10}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-              <thead><tr>{["자산번호","설비명","모델","제조사","라인","분류","위치","상태","관리"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
+              <thead><tr>{["자산번호","설비명","모델","제조사","라인","분류","위치","상태","PM/BM","관리"].map(h=><th key={h} style={s.th}>{h}</th>)}</tr></thead>
               <tbody>
                 {filtered.map((a,i)=>{
                   const st=ST_COLOR[a.status]||{bg:"#eee",cl:"#555"};
@@ -650,6 +652,7 @@ function AssetMaster({t,extAssets,extLoading,extError}){
                       <td style={s.td}><span style={s.pill(CAT_BG[a.cat]||"#eee",CAT_COLOR[a.cat]||"#555")}>{a.cat}·{CAT_LABEL[a.cat]||a.cat}</span></td>
                       <td style={{...s.td,fontSize:10,maxWidth:120}}>{a.location}</td>
                       <td style={s.td}><span style={s.pill(st.bg,st.cl)}>{a.status}</span></td>
+                      <td style={s.td}><PmBmBadge assetId={a.id} /></td>
                       <td style={s.td}>
                         <button onClick={()=>{setForm({...a});setEditIdx(assets.indexOf(a));setSubTab("manual");setShowForm(true);}}
                           style={{fontSize:10,padding:"2px 7px",borderRadius:5,border:"0.5px solid #ccc",background:"transparent",color:"#185FA5",cursor:"pointer"}}>편집</button>
@@ -657,7 +660,7 @@ function AssetMaster({t,extAssets,extLoading,extError}){
                     </tr>
                   );
                 })}
-                {filtered.length===0&&<tr><td colSpan={9} style={{textAlign:"center",padding:30,color:"#999"}}>검색 결과 없음</td></tr>}
+                {filtered.length===0&&<tr><td colSpan={10} style={{textAlign:"center",padding:30,color:"#999"}}>검색 결과 없음</td></tr>}
               </tbody>
             </table>
           </div>
