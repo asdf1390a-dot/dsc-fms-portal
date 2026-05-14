@@ -1,84 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import TravelOverviewTab from '@/components/travel/TravelOverviewTab';
-import TravelScheduleTab from '@/components/travel/TravelScheduleTab';
-import TravelCostsTab from '@/components/travel/TravelCostsTab';
-import TravelChecklistTab from '@/components/travel/TravelChecklistTab';
-import TravelDocumentsTab from '@/components/travel/TravelDocumentsTab';
-import TravelNotificationsTab from '@/components/travel/TravelNotificationsTab';
-
-interface Travel {
-  id: string;
-  name: string;
-  description?: string;
-  start_date: string;
-  end_date: string;
-  location: string;
-  status: 'upcoming' | 'ongoing' | 'completed';
-  travel_members: Array<{ id: string; user_id: string; role: string; permission: string }>;
-  travel_events: Array<any>;
-  travel_costs: Array<any>;
-  travel_checklist_items: Array<any>;
-  travel_documents: Array<any>;
-  created_at: string;
-  updated_at: string;
-}
+import { useTravelData } from '@/hooks/useTravelData';
+import TravelOverviewTab from '../../../components/travel/TravelOverviewTab';
+import TravelScheduleTab from '../../../components/travel/TravelScheduleTab';
+import TravelCostsTab from '../../../components/travel/TravelCostsTab';
+import TravelChecklistTab from '../../../components/travel/TravelChecklistTab';
+import TravelDocumentsTab from '../../../components/travel/TravelDocumentsTab';
+import TravelNotificationsTab from '../../../components/travel/TravelNotificationsTab';
 
 type TabType = 'overview' | 'schedule' | 'costs' | 'checklist' | 'documents' | 'notifications';
-
-interface TravelResponse {
-  success: boolean;
-  data: Travel;
-  message: string;
-}
 
 export default function TravelDetailPage() {
   const router = useRouter();
   const params = useParams();
   const travelId = (params?.id as string) || '';
 
-  const [travel, setTravel] = useState<Travel | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { travel, loading, error, refetch } = useTravelData(travelId);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  useEffect(() => {
-    fetchTravel();
-  }, [travelId, refreshTrigger]);
-
-  async function fetchTravel() {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('sb-token');
-      if (!token) {
-        router.push('/auth/login');
-        return;
-      }
-
-      const response = await fetch(`/api/travels/${travelId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const data = (await response.json()) as TravelResponse;
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to fetch travel');
-      }
-
-      setTravel(data.data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-      console.error('Fetch travel error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const tabConfig = [
     { id: 'overview' as TabType, label: '개요', icon: '📋' },
@@ -157,7 +97,7 @@ export default function TravelDetailPage() {
             </div>
             <div>
               <p className="text-gray-500 mb-1">참가자</p>
-              <p className="font-semibold text-gray-900">{travel.travel_members?.length || 0}명</p>
+              <p className="font-semibold text-gray-900">{travel.members?.length || 0}명</p>
             </div>
           </div>
         </div>
@@ -193,12 +133,12 @@ export default function TravelDetailPage() {
           </div>
         )}
 
-        {activeTab === 'overview' && <TravelOverviewTab travel={travel} onRefresh={() => setRefreshTrigger(t => t + 1)} />}
-        {activeTab === 'schedule' && <TravelScheduleTab travelId={travel.id} events={travel.travel_events} onRefresh={() => setRefreshTrigger(t => t + 1)} />}
-        {activeTab === 'costs' && <TravelCostsTab travelId={travel.id} costs={travel.travel_costs} onRefresh={() => setRefreshTrigger(t => t + 1)} />}
-        {activeTab === 'checklist' && <TravelChecklistTab travelId={travel.id} items={travel.travel_checklist_items} onRefresh={() => setRefreshTrigger(t => t + 1)} />}
-        {activeTab === 'documents' && <TravelDocumentsTab travelId={travel.id} documents={travel.travel_documents} onRefresh={() => setRefreshTrigger(t => t + 1)} />}
-        {activeTab === 'notifications' && <TravelNotificationsTab travelId={travel.id} onRefresh={() => setRefreshTrigger(t => t + 1)} />}
+        {activeTab === 'overview' && <TravelOverviewTab travel={travel} onRefresh={refetch} />}
+        {activeTab === 'schedule' && <TravelScheduleTab travelId={travel.id} events={travel?.events || []} onRefresh={refetch} />}
+        {activeTab === 'costs' && <TravelCostsTab travelId={travel.id} costs={travel?.costs || []} onRefresh={refetch} />}
+        {activeTab === 'checklist' && <TravelChecklistTab travelId={travel.id} items={travel?.checklist_items || []} onRefresh={refetch} />}
+        {activeTab === 'documents' && <TravelDocumentsTab travelId={travel.id} documents={travel?.documents || []} onRefresh={refetch} />}
+        {activeTab === 'notifications' && <TravelNotificationsTab travelId={travel.id} onRefresh={refetch} />}
       </div>
     </div>
   );

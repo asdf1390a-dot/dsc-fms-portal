@@ -1,26 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-
-interface TravelMember {
-  id: string;
-  user_id: string;
-  role: string;
-  permission: string;
-}
-
-interface Travel {
-  id: string;
-  name: string;
-  description?: string;
-  start_date: string;
-  end_date: string;
-  location: string;
-  status: 'upcoming' | 'ongoing' | 'completed';
-  travel_members: TravelMember[];
-  created_at: string;
-  updated_at: string;
-}
+import { Travel } from '@/types/travel';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   travel: Travel;
@@ -42,22 +24,25 @@ export default function TravelOverviewTab({ travel, onRefresh }: Props) {
       setSaving(true);
       setSaveError(null);
 
-      const token = localStorage.getItem('sb-token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Not authenticated');
+      }
 
       const response = await fetch(`/api/travels/${travel.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'x-user-id': session.user.id,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(formData),
       });
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error?.message || 'Failed to update travel');
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update travel');
       }
 
       setIsEditing(false);
@@ -190,7 +175,7 @@ export default function TravelOverviewTab({ travel, onRefresh }: Props) {
 
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <p className="text-sm font-medium text-gray-500 mb-2">참가자</p>
-          <p className="text-2xl font-bold text-gray-900">{travel.travel_members?.length || 0}명</p>
+          <p className="text-2xl font-bold text-gray-900">{travel.members?.length || 0}명</p>
         </div>
       </div>
 
@@ -198,11 +183,11 @@ export default function TravelOverviewTab({ travel, onRefresh }: Props) {
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4">참가자</h3>
         <div className="space-y-2">
-          {travel.travel_members && travel.travel_members.length > 0 ? (
-            travel.travel_members.map((member) => (
+          {travel.members && travel.members.length > 0 ? (
+            travel.members.map((member) => (
               <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div>
-                  <p className="font-medium text-gray-900">{member.user_id}</p>
+                  <p className="font-medium text-gray-900">{member.user?.user_metadata?.name || member.user_id}</p>
                   <p className="text-sm text-gray-500">{member.role === 'organizer' ? '주최자' : '참가자'}</p>
                 </div>
                 <span className={`text-xs font-medium px-2 py-1 rounded ${

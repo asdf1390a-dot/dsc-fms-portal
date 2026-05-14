@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { supabaseAdmin } from '../../../../../../lib/travel/supabase-client';
 import { successResponse, errorResponse, getAuthToken } from '../../../../../../lib/travel/utils';
 
+export const dynamic = 'force-dynamic';
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string; eventId: string } }

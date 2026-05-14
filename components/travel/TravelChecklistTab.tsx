@@ -1,24 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-
-interface ChecklistItem {
-  id: string;
-  title: string;
-  category: string;
-  priority: string;
-  is_completed: boolean;
-  description?: string;
-}
+import { TravelChecklistItem } from '@/types/travel';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   travelId: string;
-  items: ChecklistItem[];
+  items: TravelChecklistItem[];
   onRefresh: () => void;
 }
 
 export default function TravelChecklistTab({ travelId, items: initialItems, onRefresh }: Props) {
-  const [items, setItems] = useState<ChecklistItem[]>(initialItems || []);
+  const [items, setItems] = useState<TravelChecklistItem[]>(initialItems || []);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,22 +29,25 @@ export default function TravelChecklistTab({ travelId, items: initialItems, onRe
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('sb-token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Not authenticated');
+      }
 
       const response = await fetch(`/api/travels/${travelId}/checklist`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'x-user-id': session.user.id,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify(formData),
       });
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error?.message || 'Failed to add checklist item');
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add checklist item');
       }
 
       setFormData({
@@ -71,14 +67,17 @@ export default function TravelChecklistTab({ travelId, items: initialItems, onRe
 
   async function handleToggleItem(itemId: string, isCompleted: boolean) {
     try {
-      const token = localStorage.getItem('sb-token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Not authenticated');
+      }
 
       const response = await fetch(`/api/travels/${travelId}/checklist`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'x-user-id': session.user.id,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           itemId,
@@ -88,8 +87,8 @@ export default function TravelChecklistTab({ travelId, items: initialItems, onRe
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error?.message || 'Failed to update item');
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update item');
       }
 
       onRefresh();
@@ -177,7 +176,7 @@ export default function TravelChecklistTab({ travelId, items: initialItems, onRe
     }
     acc[category].push(item);
     return acc;
-  }, {} as Record<string, ChecklistItem[]>);
+  }, {} as Record<string, TravelChecklistItem[]>);
 
   return (
     <div className="space-y-6">
@@ -322,13 +321,13 @@ export default function TravelChecklistTab({ travelId, items: initialItems, onRe
                       >
                         {item.title}
                       </p>
-                      {item.description && (
-                        <p className="text-sm text-gray-500 mt-1">{item.description}</p>
+                      {item.notes && (
+                        <p className="text-sm text-gray-500 mt-1">{item.notes}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-medium px-2 py-1 rounded ${getPriorityColor(item.priority)}`}>
-                        {getPriorityLabel(item.priority)}
+                      <span className={`text-xs font-medium px-2 py-1 rounded ${getPriorityColor(item.priority || 'medium')}`}>
+                        {getPriorityLabel(item.priority || 'medium')}
                       </span>
                       <button
                         onClick={() => handleDeleteItem(item.id)}

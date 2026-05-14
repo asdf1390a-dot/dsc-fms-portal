@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/backups/schedule/daily",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/backups/metrics/daily",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/backups/cleanup/daily",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}

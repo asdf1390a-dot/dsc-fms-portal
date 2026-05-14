@@ -1,18 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-
-interface TravelDocument {
-  id: string;
-  travel_id: string;
-  file_name: string;
-  file_size: number;
-  file_type: string;
-  storage_path: string;
-  public_url: string;
-  uploaded_at: string;
-  uploaded_by: string;
-}
+import { TravelDocument } from '@/types/travel';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   travelId: string;
@@ -31,8 +21,10 @@ export default function TravelDocumentsTab({ travelId, documents: initialDocumen
       setUploading(true);
       setUploadError(null);
 
-      const token = localStorage.getItem('sb-token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Not authenticated');
+      }
 
       for (const file of files) {
         if (file.size > 10 * 1024 * 1024) {
@@ -46,15 +38,16 @@ export default function TravelDocumentsTab({ travelId, documents: initialDocumen
         const response = await fetch(`/api/travels/${travelId}/documents`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'x-user-id': session.user.id,
+            'Authorization': `Bearer ${session.access_token}`,
           },
           body: formData,
         });
 
         const data = await response.json();
 
-        if (!response.ok || !data.success) {
-          setUploadError(data.error?.message || `업로드 실패: ${file.name}`);
+        if (!response.ok) {
+          setUploadError(data.error || `업로드 실패: ${file.name}`);
           continue;
         }
       }
@@ -69,22 +62,24 @@ export default function TravelDocumentsTab({ travelId, documents: initialDocumen
 
   async function handleDeleteDocument(documentId: string) {
     try {
-      const token = localStorage.getItem('sb-token');
-      if (!token) return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error('Not authenticated');
+      }
 
       const response = await fetch(`/api/travels/${travelId}/documents`, {
         method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'x-user-id': session.user.id,
+          'x-doc-id': documentId,
+          'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ documentId }),
       });
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        console.error('Delete failed:', data.error?.message);
+      if (!response.ok) {
+        console.error('Delete failed:', data.error);
         return;
       }
 
@@ -92,6 +87,11 @@ export default function TravelDocumentsTab({ travelId, documents: initialDocumen
     } catch (err) {
       console.error('Delete error:', err);
     }
+  }
+
+  function getPublicUrl(filePath: string): string {
+    const { data } = supabase.storage.from('travel-documents').getPublicUrl(filePath);
+    return data.publicUrl;
   }
 
   function formatFileSize(bytes: number): string {
@@ -253,7 +253,7 @@ export default function TravelDocumentsTab({ travelId, documents: initialDocumen
                         </div>
                         <div className="flex items-center gap-2 ml-4">
                           <a
-                            href={doc.public_url}
+                            href={getPublicUrl(doc.file_path)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-700 font-medium text-sm"
