@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import JeepneyLayout from '../../../components/jeepney/JeepneyLayout';
 import {
   ToggleSwitch,
@@ -19,6 +20,7 @@ const DEFAULT_POLICY = {
 };
 
 export default function AutoBackupSettings() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [policy, setPolicy] = useState(DEFAULT_POLICY);
   const [loading, setLoading] = useState(true);
@@ -29,8 +31,7 @@ export default function AutoBackupSettings() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      setLoading(false);
-      setError('로그인이 필요합니다');
+      router.replace(`/login?next=${encodeURIComponent('/jeepney-personal/backup-app/settings')}`);
       return;
     }
     (async () => {
@@ -45,7 +46,7 @@ export default function AutoBackupSettings() {
         setLoading(false);
       }
     })();
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
   const save = async (patch) => {
     setSaving(true);

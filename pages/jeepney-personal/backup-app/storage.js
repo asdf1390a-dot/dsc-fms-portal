@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import JeepneyLayout from '../../../components/jeepney/JeepneyLayout';
 import {
   QuotaCard,
@@ -11,6 +12,7 @@ import { useAuth } from '../../../lib/use-auth';
 import { apiGet, apiPost } from '../../../lib/backup-fetch';
 
 export default function StorageManagement() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [quota, setQuota] = useState(null);
   const [backups, setBackups] = useState([]);
@@ -39,12 +41,11 @@ export default function StorageManagement() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      setLoading(false);
-      setError('로그인이 필요합니다');
+      router.replace(`/login?next=${encodeURIComponent('/jeepney-personal/backup-app/storage')}`);
       return;
     }
     refresh();
-  }, [user, authLoading, refresh]);
+  }, [user, authLoading, refresh, router]);
 
   const handleConfirmDelete = async () => {
     if (!confirmTarget) return;

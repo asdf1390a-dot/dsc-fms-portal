@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import JeepneyLayout from '../../../components/jeepney/JeepneyLayout';
 import {
   MetricsSummary,
@@ -11,6 +12,7 @@ import { useAuth } from '../../../lib/use-auth';
 import { apiGet } from '../../../lib/backup-fetch';
 
 export default function BackupMetricsPage() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [summary, setSummary] = useState(null);
   const [daily, setDaily] = useState([]);
@@ -20,8 +22,7 @@ export default function BackupMetricsPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      setLoading(false);
-      setError('로그인이 필요합니다');
+      router.replace(`/login?next=${encodeURIComponent('/jeepney-personal/backup-app/metrics')}`);
       return;
     }
     (async () => {
@@ -40,7 +41,7 @@ export default function BackupMetricsPage() {
         setLoading(false);
       }
     })();
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
   return (
     <JeepneyLayout

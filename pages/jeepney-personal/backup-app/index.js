@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import JeepneyLayout from '../../../components/jeepney/JeepneyLayout';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
@@ -9,6 +10,7 @@ import { useAuth } from '../../../lib/use-auth';
 import { supabase } from '../../../lib/supabase';
 
 export default function BackupApp() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [backups, setBackups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,12 +22,11 @@ export default function BackupApp() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      setLoading(false);
-      setError('로그인이 필요합니다');
+      router.replace(`/login?next=${encodeURIComponent('/jeepney-personal/backup-app')}`);
       return;
     }
     fetchBackups();
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
   const fetchBackups = async () => {
     try {

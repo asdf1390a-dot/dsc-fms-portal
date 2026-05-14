@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
 import JeepneyLayout from '../../../components/jeepney/JeepneyLayout';
 import {
   NotificationPreferences,
@@ -33,6 +34,7 @@ function savePrefs(arr) {
 }
 
 export default function NotificationSettingsPage() {
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [channels, setChannels] = useState(DEFAULT_CHANNELS);
   const [typeFilter, setTypeFilter] = useState('');
@@ -66,12 +68,11 @@ export default function NotificationSettingsPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      setLoading(false);
-      setError('로그인이 필요합니다');
+      router.replace(`/login?next=${encodeURIComponent('/jeepney-personal/backup-app/notifications')}`);
       return;
     }
     refresh();
-  }, [user, authLoading, refresh]);
+  }, [user, authLoading, refresh, router]);
 
   const handleChannelsChange = (next) => {
     setChannels(next);
