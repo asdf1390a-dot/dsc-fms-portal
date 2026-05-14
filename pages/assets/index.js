@@ -45,16 +45,45 @@ export default function AssetsPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [a, c, cats] = await Promise.all([
-        supabase.from('assets')
+      // Fetch all assets with pagination to handle 1000+ row limit
+      const pageSize = 500;
+      let allAssets = [];
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore && !cancelled) {
+        const { data, error } = await supabase.from('assets')
           .select('id, machine_asset_code, machine_asset_number, asset_class_code, serial_no, name_en, name_ta, model, make, location, status, remark')
-          .order('machine_asset_code'),
+          .order('machine_asset_code')
+          .range(offset, offset + pageSize - 1);
+
+        if (error) {
+          setError(error.message);
+          setLoading(false);
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          hasMore = false;
+        } else {
+          allAssets = allAssets.concat(data);
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            offset += pageSize;
+          }
+        }
+      }
+
+      if (cancelled) return;
+
+      const [c, cats] = await Promise.all([
         supabase.from('asset_classes').select('code, category_code, name_en'),
         supabase.from('categories').select('code, name_en, name_ko').order('code'),
       ]);
+
       if (cancelled) return;
-      if (a.error) { setError(a.error.message); setLoading(false); return; }
-      setAssets(a.data || []);
+      setAssets(allAssets);
       setClasses(c.data || []);
       setCategories(cats.data || []);
       setLoading(false);

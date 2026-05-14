@@ -246,32 +246,61 @@ export default function NewBMPage() {
     let cancelled = false;
     (async () => {
       setLoadingMaster(true);
+
+      // Fetch all assets with pagination
+      const pageSize = 500;
+      let allAssets = [];
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore && !cancelled) {
+        const { data, error } = await supabase
+          .from('assets')
+          .select('id, machine_asset_number, name_en, name_ta, location, status, asset_class_code, model, extra')
+          .order('machine_asset_number', { ascending: true })
+          .range(offset, offset + pageSize - 1);
+
+        if (error) {
+          setError(`Asset load: ${error.message}`);
+          setLoadingMaster(false);
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          hasMore = false;
+        } else {
+          allAssets = allAssets.concat(data);
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            offset += pageSize;
+          }
+        }
+      }
+
+      if (cancelled) return;
+
       const [
         { data: cats, error: catErr },
         { data: cls, error: clsErr },
-        { data: a, error: aErr },
         { data: c, error: cErr },
       ] = await Promise.all([
         supabase.from('categories').select('code, name_en').order('code'),
         supabase.from('asset_classes').select('code, name_en, category_code').order('code'),
-        supabase
-          .from('assets')
-          .select('id, machine_asset_number, name_en, name_ta, location, status, asset_class_code, model, extra')
-          .order('machine_asset_number', { ascending: true }),
         supabase
           .from('cause_codes')
           .select('code, name_en, name_ta, group_name')
           .order('group_name', { ascending: true })
           .order('name_en', { ascending: true }),
       ]);
+
       if (cancelled) return;
       if (catErr) setError(`Category load: ${catErr.message}`);
       if (clsErr) setError(prev => prev || `Class load: ${clsErr.message}`);
-      if (aErr)   setError(prev => prev || `Asset load: ${aErr.message}`);
       if (cErr)   setError(prev => prev || `Cause load: ${cErr.message}`);
       setCategories(cats || []);
       setAssetClasses(cls || []);
-      setAssets(a || []);
+      setAssets(allAssets);
       setCauses(c || []);
       setLoadingMaster(false);
     })();

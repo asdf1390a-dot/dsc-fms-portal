@@ -49,14 +49,41 @@ export default function NewWorkOrderPage() {
     let cancelled = false;
     (async () => {
       setLoadingMaster(true);
-      const { data, error: fetchErr } = await supabase
-        .from('assets')
-        .select('id, machine_asset_number, name_en')
-        .eq('status', 'active')
-        .order('machine_asset_number');
+
+      // Fetch all active assets with pagination
+      const pageSize = 500;
+      let allAssets = [];
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore && !cancelled) {
+        const { data, error: fetchErr } = await supabase
+          .from('assets')
+          .select('id, machine_asset_number, name_en')
+          .eq('status', 'active')
+          .order('machine_asset_number')
+          .range(offset, offset + pageSize - 1);
+
+        if (fetchErr) {
+          setError(fetchErr.message);
+          setLoadingMaster(false);
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          hasMore = false;
+        } else {
+          allAssets = allAssets.concat(data);
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            offset += pageSize;
+          }
+        }
+      }
+
       if (cancelled) return;
-      if (fetchErr) { setError(fetchErr.message); setLoadingMaster(false); return; }
-      setAssets(data || []);
+      setAssets(allAssets);
       setLoadingMaster(false);
     })();
     return () => { cancelled = true; };
