@@ -7,7 +7,7 @@ import BottomNav from '../../components/BottomNav';
 import FileDropZone from '../../components/reports/FileDropZone';
 
 export default function QualityReportPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, isAuthed } = useAuth();
 
   const today = new Date();
   const [year,  setYear ] = useState(today.getFullYear());
@@ -27,7 +27,7 @@ export default function QualityReportPage() {
 
   const targetMonth = `${year}-${String(month).padStart(2, '0')}-01`;
   const monthLabel  = `${year}년 ${String(month).padStart(2, '0')}월`;
-  const canGenerate = prevExcel && prevPpt && dataExcel && !busy;
+  const canGenerate = prevExcel && prevPpt && dataExcel && !busy && isAuthed;
 
   function prevM() { if (month === 1) { setYear(y => y - 1); setMonth(12); } else setMonth(m => m - 1); }
   function nextM() { if (month === 12) { setYear(y => y + 1); setMonth(1); } else setMonth(m => m + 1); }
@@ -96,22 +96,6 @@ export default function QualityReportPage() {
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.url) { alert(j.error || '다운로드 실패'); return; }
     window.location.href = j.url;
-  }
-
-  if (authLoading) {
-    return <main style={S.page}><div style={S.emptyText}>로딩 중…</div></main>;
-  }
-  if (!user) {
-    return (
-      <main style={S.page}>
-        <header style={S.header}>
-          <Link href="/" style={S.backBtn}>←</Link>
-          <h1 style={S.title}>품질 월보고서</h1>
-          <div style={{ width: 44 }} />
-        </header>
-        <div style={S.errorBox}>로그인이 필요합니다. <Link href="/login" style={{ color: '#fca5a5' }}>로그인</Link></div>
-      </main>
-    );
   }
 
   return (
@@ -185,6 +169,7 @@ export default function QualityReportPage() {
           >
             {busy ? '생성 중…' : '보고서 생성'}
           </button>
+          {!isAuthed && <div style={S.errorBox}>로그인 후 보고서 생성이 가능합니다.</div>}
           {step && <div style={S.stepText}>{step}</div>}
           {error && <div style={S.errorBox}>{error}</div>}
         </section>
