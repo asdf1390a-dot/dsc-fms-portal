@@ -28,19 +28,19 @@ export default function LoginPage() {
     setInfo(null);
     try {
       let email = identifier.trim();
-      if (!email) throw new Error('Enter email or employee ID');
+      if (!email) throw new Error('이메일 또는 직원 ID를 입력하세요');
       if (!email.includes('@')) {
         // looks like an employee ID — resolve to email server-side
-        setInfo('Looking up employee ID…');
+        setInfo('직원 ID 조회 중…');
         const r = await fetch('/api/auth/find-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ employee_id: email }),
         });
-        if (!r.ok) throw new Error(`Employee ID not found: ${email}`);
+        if (!r.ok) throw new Error(`직원 ID를 찾을 수 없습니다: ${email}`);
         const j = await r.json();
         email = j.email;
-        setInfo(`Resolved → ${email}`);
+        setInfo(`변환됨 → ${email}`);
       }
 
       const { error: authErr } = await supabase.auth.signInWithPassword({ email, password });
@@ -58,28 +58,28 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>Login | DSC FMS</title>
+        <title>로그인 | DSC FMS</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
       <main style={S.page}>
         <div style={S.card}>
           <div style={S.brand}>DSC FMS</div>
-          <h1 style={S.title}>Sign in</h1>
-          <p style={S.subtitle}>Employee ID or email + password</p>
+          <h1 style={S.title}>로그인</h1>
+          <p style={S.subtitle}>직원 ID 또는 이메일 + 비밀번호</p>
 
           <form onSubmit={onSubmit}>
-            <label style={S.label}>Employee ID / Email</label>
+            <label style={S.label}>직원 ID / 이메일</label>
             <input
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="KNA001 or you@example.com"
+              placeholder="직원 ID 또는 이메일"
               autoComplete="username"
               autoFocus
               inputMode="email"
               style={S.input}
             />
 
-            <label style={S.label}>Password</label>
+            <label style={S.label}>비밀번호</label>
             <input
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -96,12 +96,12 @@ export default function LoginPage() {
               ...S.button,
               ...((busy || !identifier || !password) ? S.buttonDisabled : null),
             }}>
-              {busy ? 'Signing in…' : 'Sign in'}
+              {busy ? '로그인 중…' : '로그인'}
             </button>
           </form>
 
           <div style={S.footer}>
-            <Link href="/assets" style={S.link}>Browse without login →</Link>
+            <Link href="/assets" style={S.link}>로그인 없이 둘러보기 →</Link>
           </div>
         </div>
       </main>

@@ -28,7 +28,7 @@ export default function EditAssetPage() {
         .eq('machine_asset_number', id)
         .maybeSingle();
       if (error) { setError(error.message); setLoading(false); return; }
-      if (!data) { setError('Not found'); setLoading(false); return; }
+      if (!data) { setError('찾을 수 없습니다'); setLoading(false); return; }
       setAsset(data);
       setLoading(false);
     })();
@@ -45,16 +45,16 @@ export default function EditAssetPage() {
   return (
     <>
       <Head>
-        <title>{asset ? `Edit ${asset.machine_asset_number}` : 'Edit Asset'} | DSC FMS</title>
+        <title>{asset ? `${asset.machine_asset_number} 편집` : '자산 편집'} | DSC FMS</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
       <main style={S.page}>
         <header style={S.header}>
-          <Link href={`/assets/${encodeURIComponent(id || '')}`} style={S.backLink}>← Detail</Link>
-          <h1 style={S.title}>Edit Asset</h1>
+          <Link href={`/assets/${encodeURIComponent(id || '')}`} style={S.backLink}>← 상세</Link>
+          <h1 style={S.title}>자산 편집</h1>
         </header>
         {loading || authLoading ? (
-          <div style={S.loading}>Loading…</div>
+          <div style={S.loading}>불러오는 중…</div>
         ) : error ? (
           <div style={S.error}>{error}</div>
         ) : asset && isAuthed ? (

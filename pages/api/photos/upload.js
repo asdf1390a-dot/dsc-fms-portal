@@ -11,7 +11,8 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../lib/supabase-admin';
 
 export const config = {
-  api: { bodyParser: { sizeLimit: '12mb' } },
+  api: { bodyParser: { sizeLimit: '50mb' } },
+  maxDuration: 60,
 };
 
 export default async function handler(req, res) {

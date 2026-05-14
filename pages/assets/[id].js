@@ -8,11 +8,11 @@ import PhotoUploader from '../../components/PhotoUploader';
 import AttachmentManager from '../../components/AttachmentManager';
 
 const STATUS_STYLES = {
-  active:      { bg: '#dcfce7', fg: '#166534', label: 'ACTIVE' },
-  idle:        { bg: '#fef3c7', fg: '#92400e', label: 'IDLE' },
-  maintenance: { bg: '#dbeafe', fg: '#1e40af', label: 'MAINT' },
-  sold:        { bg: '#e5e7eb', fg: '#374151', label: 'SOLD' },
-  scrapped:    { bg: '#fee2e2', fg: '#991b1b', label: 'SCRAP' },
+  active:      { bg: '#dcfce7', fg: '#166534', label: '가동' },
+  idle:        { bg: '#fef3c7', fg: '#92400e', label: '유휴' },
+  maintenance: { bg: '#dbeafe', fg: '#1e40af', label: '보전' },
+  sold:        { bg: '#e5e7eb', fg: '#374151', label: '판매' },
+  scrapped:    { bg: '#fee2e2', fg: '#991b1b', label: '폐기' },
 };
 
 export default function AssetDetail() {
@@ -40,7 +40,7 @@ export default function AssetDetail() {
         .maybeSingle();
       if (cancelled) return;
       if (error) { setError(error.message); setLoading(false); return; }
-      if (!data) { setError('Not found'); setLoading(false); return; }
+      if (!data) { setError('자산을 찾을 수 없습니다'); setLoading(false); return; }
       setAsset(data);
       const { data: cl } = await supabase.from('asset_classes')
         .select('*')
@@ -76,18 +76,18 @@ export default function AssetDetail() {
 
       <main style={S.page}>
         <header style={S.header}>
-          <Link href="/assets" style={S.backLink}>← Assets</Link>
-          <h1 style={S.title}>Asset</h1>
+          <Link href="/assets" style={S.backLink}>← 자산</Link>
+          <h1 style={S.title}>자산</h1>
           {isAuthed ? (
             <span style={S.userChip} title={fullName || 'logged in'}>
               {employeeId || fullName?.split(' ')[0] || '✓'}
             </span>
           ) : (
-            <Link href="/login" style={S.loginLink}>Sign in</Link>
+            <Link href="/login" style={S.loginLink}>로그인</Link>
           )}
         </header>
 
-        {loading && <div style={S.loading}>Loading…</div>}
+        {loading && <div style={S.loading}>불러오는 중…</div>}
         {error && <div style={S.errorBox}>{error}</div>}
 
         {asset && (
@@ -100,13 +100,13 @@ export default function AssetDetail() {
               </div>
             </div>
 
-            <Section title="Name">
+            <Section title="이름">
               <div style={S.name}>{asset.name_en}</div>
               {asset.name_ta && <div style={S.nameSub}>{asset.name_ta}</div>}
             </Section>
 
             {(asset.photos?.length > 0 || isAuthed) && (
-              <Section title={`Photos${asset.photos?.length ? ` (${asset.photos.length})` : ''}`}>
+              <Section title={`사진${asset.photos?.length ? ` (${asset.photos.length})` : ''}`}>
                 {isAuthed ? (
                   <PhotoUploader
                     asset={asset}
@@ -124,25 +124,25 @@ export default function AssetDetail() {
               </Section>
             )}
 
-            <Section title="Category">
-              <Field label="Code" value={asset.asset_class_code} />
-              {klass && <Field label="Class" value={klass.name_en} />}
-              {category && <Field label="Major" value={`${category.code} · ${category.name_en}`} />}
+            <Section title="카테고리">
+              <Field label="코드" value={asset.asset_class_code} />
+              {klass && <Field label="클래스" value={klass.name_en} />}
+              {category && <Field label="주종류" value={`${category.code} · ${category.name_en}`} />}
             </Section>
 
-            <Section title="Specs">
-              <Field label="Model" value={asset.model} />
-              <Field label="Make" value={asset.make} />
-              <Field label="Serial" value={asset.serial_no} />
-              <Field label="Year" value={asset.year_of_manufacture} />
+            <Section title="사양">
+              <Field label="모델" value={asset.model} />
+              <Field label="제조사" value={asset.make} />
+              <Field label="일련번호" value={asset.serial_no} />
+              <Field label="제조년도" value={asset.year_of_manufacture} />
             </Section>
 
-            <Section title="Location">
-              <Field label="Location" value={asset.location} />
+            <Section title="위치">
+              <Field label="위치" value={asset.location} />
             </Section>
 
             {asset.extra && Object.keys(asset.extra).length > 0 && (
-              <Section title="Additional">
+              <Section title="추가정보">
                 {Object.entries(asset.extra).map(([k, v]) => (
                   <Field key={k} label={k.replace(/_/g, ' ')} value={String(v)} />
                 ))}
@@ -159,24 +159,24 @@ export default function AssetDetail() {
             </Section>
 
             {asset.remark && (
-              <Section title="Remark">
+              <Section title="비고">
                 <div style={S.remark}>{asset.remark}</div>
               </Section>
             )}
 
-            <Section title="Meta">
-              <Field label="Created" value={asset.created_at ? new Date(asset.created_at).toLocaleString() : null} />
-              <Field label="Updated" value={asset.updated_at ? new Date(asset.updated_at).toLocaleString() : null} />
+            <Section title="메타정보">
+              <Field label="생성일" value={asset.created_at ? new Date(asset.created_at).toLocaleString('ko-KR') : null} />
+              <Field label="수정일" value={asset.updated_at ? new Date(asset.updated_at).toLocaleString('ko-KR') : null} />
               <Field label="QR" value={asset.qr_payload} />
             </Section>
 
-            <Section title={`Breakdown History${bmEvents.length ? ` (${bmEvents.length})` : ''}`}>
+            <Section title={`고장 이력${bmEvents.length ? ` (${bmEvents.length})` : ''}`}>
               {isAuthed && (
                 <Link
                   href={`/bm/new?asset=${encodeURIComponent(asset.machine_asset_number)}`}
                   style={S.bmReportBtn}
                 >
-                  🚨 Report Breakdown
+                  🚨 고장 신고
                 </Link>
               )}
               {bmEvents.length > 0 ? (
@@ -202,7 +202,7 @@ export default function AssetDetail() {
                   ))}
                 </ul>
               ) : !isAuthed ? (
-                <div style={{ fontSize: 13, color: '#94a3b8' }}>(none)</div>
+                <div style={{ fontSize: 13, color: '#94a3b8' }}>없음</div>
               ) : null}
             </Section>
 
@@ -238,12 +238,12 @@ export default function AssetDetail() {
               {isAuthed ? (
                 <Link href={`/assets/edit/${encodeURIComponent(asset.machine_asset_number)}`}
                   style={{ ...S.btn, ...S.btnPrimary, textDecoration: 'none', textAlign: 'center' }}>
-                  ✎ Edit
+                  ✎ 편집
                 </Link>
               ) : (
                 <Link href={`/login?next=${encodeURIComponent(`/assets/edit/${asset.machine_asset_number}`)}`}
                   style={{ ...S.btn, ...S.btnPrimary, textDecoration: 'none', textAlign: 'center' }}>
-                  Sign in to edit
+                  편집을 위해 로그인하세요
                 </Link>
               )}
             </div>

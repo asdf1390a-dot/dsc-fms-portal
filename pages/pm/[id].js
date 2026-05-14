@@ -357,7 +357,7 @@ export default function PMDetailPage() {
                       <input type="number" placeholder="수량" value={p.quantity} step="0.01" onChange={e => {
                         setParts(prev => prev.map((x, idx) => idx === i ? { ...x, quantity: e.target.value } : x));
                       }} style={{ ...S.input, padding: '8px 10px', minHeight: 40, fontSize: 14 }} />
-                      <input type="text" placeholder="ea" value={p.unit} onChange={e => {
+                      <input type="text" placeholder="개/SET/L/m 등" value={p.unit} onChange={e => {
                         setParts(prev => prev.map((x, idx) => idx === i ? { ...x, unit: e.target.value } : x));
                       }} style={{ ...S.input, padding: '8px 10px', minHeight: 40, fontSize: 14 }} />
                       <button type="button" onClick={() => setParts(prev => prev.filter((_, idx) => idx !== i))}

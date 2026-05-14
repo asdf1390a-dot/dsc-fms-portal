@@ -15,7 +15,12 @@ import { supabaseAdmin } from '../../../../lib/supabase-admin';
 import { processQualityExcel } from '../../../../lib/reports/excel-processor';
 import { processQualityPpt } from '../../../../lib/reports/ppt-processor';
 
-export const config = { api: { bodyParser: false, sizeLimit: '50mb' } };
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+  maxDuration: 120,
+};
 
 const BUCKET = 'quality-reports';
 
@@ -33,7 +38,7 @@ function prevMonthOf({ year, month }) {
 
 async function parseMultipart(req) {
   const form = formidable({
-    maxFileSize: 50 * 1024 * 1024,
+    maxFileSize: 200 * 1024 * 1024,
     multiples: false,
     keepExtensions: true,
   });
@@ -80,6 +85,11 @@ export default async function handler(req, res) {
   const tm = parseMonthString(targetMonthStr);
   if (!tm) return res.status(400).json({ error: 'bad_target_month' });
 
+  const rollingWindowSize = parseInt(singleField(fields.rolling_window_size) || '3', 10);
+  if (!Number.isFinite(rollingWindowSize) || rollingWindowSize < 1 || rollingWindowSize > 12) {
+    return res.status(400).json({ error: 'bad_rolling_window_size' });
+  }
+
   const prevExcelF = singleFile(files.prev_excel);
   const prevPptF   = singleFile(files.prev_ppt);
   const dataExcelF = singleFile(files.data_excel);
@@ -117,12 +127,14 @@ export default async function handler(req, res) {
       rawDataBuf,
       prevMonth: prev.month,
       curMonth: cur.month,
+      rollingWindowSize,
     });
     // ── PPT ──
     const outPptBuf = await processQualityPpt({
       prevPptBuf,
       prevMonth: prev.month,
       curMonth: cur.month,
+      rollingWindowSize,
     });
 
     const stamp = Date.now();

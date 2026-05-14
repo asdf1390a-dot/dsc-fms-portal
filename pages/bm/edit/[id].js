@@ -12,18 +12,18 @@ import BottomNav from '../../../components/BottomNav';
 import BMStatusBadge from '../../../components/bm/BMStatusBadge';
 
 const STATUS_OPTIONS = [
-  { v: 'open',          ko: '신규 / Open' },
-  { v: 'in_progress',   ko: '진행중 / In Progress' },
-  { v: 'pending_parts', ko: '부품 대기 / Wait Parts' },
-  { v: 'resolved',      ko: '완료 / Resolved' },
-  { v: 'wontfix',       ko: "보류 / Won't Fix" },
-  { v: 'cancelled',     ko: '취소 / Cancelled' },
+  { v: 'open',          ko: '접수' },
+  { v: 'in_progress',   ko: '진행중' },
+  { v: 'pending_parts', ko: '부품대기' },
+  { v: 'resolved',      ko: '완료' },
+  { v: 'wontfix',       ko: '미처리' },
+  { v: 'cancelled',     ko: '취소' },
 ];
 const SEVERITY_OPTIONS = [
-  { v: 'minor',     ko: 'MINOR',     color: '#64748b' },
-  { v: 'normal',    ko: 'NORMAL',    color: '#2563eb' },
-  { v: 'major',     ko: 'MAJOR',     color: '#f97316' },
-  { v: 'line_down', ko: 'LINE DOWN', color: '#dc2626' },
+  { v: 'minor',     ko: '경미',     color: '#64748b' },
+  { v: 'normal',    ko: '정상',    color: '#2563eb' },
+  { v: 'major',     ko: '주요',     color: '#f97316' },
+  { v: 'line_down', ko: '라인다운', color: '#dc2626' },
 ];
 
 function toLocalInput(iso) {
@@ -82,7 +82,7 @@ export default function BMEditPage() {
         .maybeSingle();
       if (cancelled) return;
       if (error) { setError(error.message); setLoading(false); return; }
-      if (!data) { setError('Not found'); setLoading(false); return; }
+      if (!data) { setError('찾을 수 없습니다'); setLoading(false); return; }
       setEvent(data);
       setStatus(data.status || 'open');
       setSeverity(data.severity || 'normal');
@@ -162,9 +162,9 @@ export default function BMEditPage() {
       </Head>
       <main style={S.page}>
         <header style={S.header}>
-          <Link href={id ? `/bm/${id}` : '/bm'} style={S.backLink} aria-label="Back">← 취소</Link>
+          <Link href={id ? `/bm/${id}` : '/bm'} style={S.backLink} aria-label="돌아가기">← 취소</Link>
           <div style={S.headerTitleWrap}>
-            <div style={S.headerTitle}>BM 수정 / Edit</div>
+            <div style={S.headerTitle}>BM 수정</div>
             {event?.assets?.machine_asset_number && (
               <div style={S.headerSubtitle}>{event.assets.machine_asset_number}</div>
             )}
@@ -178,7 +178,7 @@ export default function BMEditPage() {
         {event && (
           <div style={S.content}>
             {/* 자산 (읽기 전용) */}
-            <Section title="자산 / Asset (변경 불가)">
+            <Section title="자산 (읽기 전용)">
               <div style={S.readonlyAsset}>
                 <div style={S.assetTag}>{event.assets?.machine_asset_number || '—'}</div>
                 {event.assets?.name_en && (
@@ -191,7 +191,7 @@ export default function BMEditPage() {
             </Section>
 
             {/* 상태 */}
-            <Section title="상태 / Status">
+            <Section title="상태">
               <div style={{ marginBottom: 8 }}>
                 <BMStatusBadge status={status} />
               </div>
@@ -203,7 +203,7 @@ export default function BMEditPage() {
             </Section>
 
             {/* 심각도 */}
-            <Section title="심각도 / Severity">
+            <Section title="심각도">
               <div style={S.severityGrid}>
                 {SEVERITY_OPTIONS.map(o => {
                   const active = severity === o.v;
@@ -223,25 +223,25 @@ export default function BMEditPage() {
             </Section>
 
             {/* 증상 */}
-            <Section title="증상 / Symptom">
+            <Section title="증상">
               <textarea
                 value={symptom}
                 onChange={(e) => setSymptom(e.target.value)}
-                placeholder="What happened?"
+                placeholder="어떤 문제가 발생했나요?"
                 style={{ ...S.input, height: 80 }}
               />
               <textarea
                 value={symptomTa}
                 onChange={(e) => setSymptomTa(e.target.value)}
-                placeholder="(타밀어 / Tamil — optional)"
+                placeholder="(타밀어, 선택사항)"
                 style={{ ...S.input, height: 60, marginTop: 8, fontStyle: 'italic' }}
               />
             </Section>
 
             {/* 시간 */}
-            <Section title="시간 / Timing">
+            <Section title="시간">
               <div style={S.fieldRow}>
-                <label style={S.fieldLabel}>고장 시작 / Downtime Start</label>
+                <label style={S.fieldLabel}>고장 시작</label>
                 <input
                   type="datetime-local"
                   value={downtimeStart}
@@ -250,7 +250,7 @@ export default function BMEditPage() {
                 />
               </div>
               <div style={{ ...S.fieldRow, marginTop: 10 }}>
-                <label style={S.fieldLabel}>수리 완료 / Downtime End</label>
+                <label style={S.fieldLabel}>수리 완료</label>
                 <input
                   type="datetime-local"
                   value={downtimeEnd}
@@ -261,44 +261,44 @@ export default function BMEditPage() {
             </Section>
 
             {/* 원인 */}
-            <Section title="원인 / Root Cause">
+            <Section title="원인">
               <textarea
                 value={cause}
                 onChange={(e) => setCause(e.target.value)}
-                placeholder="Why did it happen?"
+                placeholder="왜 발생했나요?"
                 style={{ ...S.input, height: 80 }}
               />
             </Section>
 
             {/* 조치 */}
-            <Section title="조치 내용 / Action Taken">
+            <Section title="조치 내용">
               <textarea
                 value={actionTaken}
                 onChange={(e) => setActionTaken(e.target.value)}
-                placeholder="What did you do?"
+                placeholder="어떻게 조치했나요?"
                 style={{ ...S.input, height: 100 }}
               />
             </Section>
 
             {/* 담당자 */}
-            <Section title="담당자 / Personnel">
+            <Section title="담당자">
               <div style={S.fieldRow}>
-                <label style={S.fieldLabel}>신고자 / Reporter</label>
+                <label style={S.fieldLabel}>신고자</label>
                 <input
                   type="text"
                   value={reporterName}
                   onChange={(e) => setReporterName(e.target.value)}
-                  placeholder="이름 / Name"
+                  placeholder="이름"
                   style={S.input}
                 />
               </div>
               <div style={{ ...S.fieldRow, marginTop: 10 }}>
-                <label style={S.fieldLabel}>완료 처리자 / Resolver</label>
+                <label style={S.fieldLabel}>처리자</label>
                 <input
                   type="text"
                   value={resolverName}
                   onChange={(e) => setResolverName(e.target.value)}
-                  placeholder="이름 / Name"
+                  placeholder="이름"
                   style={S.input}
                 />
               </div>

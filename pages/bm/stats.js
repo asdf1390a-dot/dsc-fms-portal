@@ -130,9 +130,9 @@ export default function BMStatsPage() {
       </Head>
       <main style={S.page}>
         <header style={S.header}>
-          <Link href="/bm" style={S.backLink} aria-label="Back">← BM</Link>
+          <Link href="/bm" style={S.backLink} aria-label="돌아가기">← BM</Link>
           <div style={S.headerTitleWrap}>
-            <div style={S.headerTitle}>BM 통계 / Stats</div>
+            <div style={S.headerTitle}>BM 통계</div>
             <div style={S.headerSubtitle}>{fmtRange(range)}</div>
           </div>
           <div style={{ width: 44 }} />
@@ -169,7 +169,7 @@ export default function BMStatsPage() {
 
         {/* Top5 설비 */}
         <section style={S.section}>
-          <div style={S.sectionTitle}>최다 고장 설비 Top5 / Top Breakdowns</div>
+          <div style={S.sectionTitle}>최다 고장 설비 Top5</div>
           <div style={S.sectionBody}>
             {loading ? (
               <div style={S.empty}>불러오는 중…</div>

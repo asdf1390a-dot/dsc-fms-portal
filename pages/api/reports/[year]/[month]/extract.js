@@ -8,13 +8,16 @@ import * as XLSX from 'xlsx';
 import { getUserFromRequest } from '../../../../../lib/api-auth';
 import { supabaseAdmin } from '../../../../../lib/supabase-admin';
 
-export const config = { api: { bodyParser: false } };
+export const config = {
+  api: { bodyParser: false },
+  maxDuration: 120,
+};
 
 const MONTH_ABBR = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 
 function parseForm(req) {
   return new Promise((resolve, reject) => {
-    const form = formidable({ multiples: true, maxFileSize: 30 * 1024 * 1024 });
+    const form = formidable({ multiples: true, maxFileSize: 200 * 1024 * 1024 });
     form.parse(req, (err, fields, files) => {
       if (err) return reject(err);
       resolve({ fields, files });

@@ -16,8 +16,8 @@ const STATUS_FLOW = {
   cancelled:     ['open'],
 };
 const STATUS_LABEL = {
-  open: 'Open', in_progress: 'In Progress', pending_parts: 'Wait Parts',
-  resolved: 'Resolved', wontfix: "Won't Fix", cancelled: 'Cancelled',
+  open: '접수', in_progress: '진행중', pending_parts: '부품대기',
+  resolved: '완료', wontfix: '미처리', cancelled: '취소',
 };
 const STATUS_PILL = {
   open:          { bg: 'rgba(220,38,38,0.18)',  fg: '#fca5a5', border: 'rgba(220,38,38,0.6)' },
@@ -30,7 +30,7 @@ const STATUS_PILL = {
 
 // ── Severity → priority bar colour ─────────────────────────────────
 const SEVERITY_LABEL = {
-  line_down: 'LINE DOWN', major: 'MAJOR', normal: 'NORMAL', minor: 'MINOR',
+  line_down: '라인다운', major: '주요', normal: '정상', minor: '경미',
 };
 const SEVERITY_BAR = {
   line_down: '#dc2626', major: '#f97316', normal: '#2563eb', minor: '#64748b',
@@ -66,7 +66,7 @@ export default function BMDetailPage() {
         .eq('id', id).maybeSingle();
       if (cancelled) return;
       if (error) { setError(error.message); setLoading(false); return; }
-      if (!data) { setError('Not found'); setLoading(false); return; }
+      if (!data) { setError('찾을 수 없습니다'); setLoading(false); return; }
       setEvent(data);
       setAction(data.action_taken || '');
       setCause(data.cause || '');
@@ -161,7 +161,7 @@ export default function BMDetailPage() {
       <main style={S.page}>
         {/* ── Sticky header ───────────────────────────────────────── */}
         <header style={S.header}>
-          <Link href="/bm" style={S.backLink} aria-label="Back to list">← BM</Link>
+          <Link href="/bm" style={S.backLink} aria-label="목록으로">← BM 이력</Link>
           <div style={S.headerTitleWrap}>
             <div style={S.headerTitle}>
               {event?.assets?.machine_asset_number || 'BM Event'}
@@ -171,7 +171,7 @@ export default function BMDetailPage() {
             )}
           </div>
           {isAuthed && event ? (
-            <Link href={`/bm/edit/${event.id}`} style={S.editLink} aria-label="Edit">
+            <Link href={`/bm/edit/${event.id}`} style={S.editLink} aria-label="편집">
               편집
             </Link>
           ) : (
@@ -207,7 +207,7 @@ export default function BMDetailPage() {
             </div>
 
             {/* ── Asset link ─────────────────────────────────────── */}
-            <Section title="Asset / 설비">
+            <Section title="자산">
               <Link
                 href={`/assets/${encodeURIComponent(event.assets?.machine_asset_number || '')}`}
                 style={S.assetLink}
@@ -224,7 +224,7 @@ export default function BMDetailPage() {
             </Section>
 
             {/* ── Symptom ────────────────────────────────────────── */}
-            <Section title="Symptom / 증상">
+            <Section title="증상">
               <div style={S.text}>{event.symptom}</div>
               {event.symptom_ta && (
                 <div style={{ ...S.text, marginTop: 8, color: '#94a3b8', fontStyle: 'italic' }}>
@@ -235,7 +235,7 @@ export default function BMDetailPage() {
 
             {/* ── Photos ─────────────────────────────────────────── */}
             {photos.length > 0 && (
-              <Section title={`Photos · ${photos.length}`}>
+              <Section title={`사진 · ${photos.length}`}>
                 <div style={S.photoGrid}>
                   {photos.map((url, i) => (
                     <button
@@ -243,7 +243,7 @@ export default function BMDetailPage() {
                       type="button"
                       onClick={() => setLightboxIdx(i)}
                       style={S.photoTile}
-                      aria-label={`Open photo ${i + 1}`}
+                      aria-label={`사진 ${i + 1} 열기`}
                     >
                       <img src={url} alt={`BM photo ${i + 1}`} style={S.photoImg} loading="lazy" />
                     </button>
@@ -253,12 +253,12 @@ export default function BMDetailPage() {
             )}
 
             {/* ── Action taken ───────────────────────────────────── */}
-            <Section title="Action Taken / 조치 내용">
+            <Section title="조치 내용">
               {isAuthed ? (
                 <textarea
                   value={action}
                   onChange={(e) => setAction(e.target.value)}
-                  placeholder="What did you do? / 무엇을 했나요?"
+                  placeholder="무엇을 했나요?"
                   style={{ ...S.input, height: 100 }}
                 />
               ) : (
@@ -269,12 +269,12 @@ export default function BMDetailPage() {
             </Section>
 
             {/* ── Root cause ─────────────────────────────────────── */}
-            <Section title="Root Cause / 원인">
+            <Section title="원인">
               {isAuthed ? (
                 <textarea
                   value={cause}
                   onChange={(e) => setCause(e.target.value)}
-                  placeholder="Why did it happen? / 왜 발생했나요?"
+                  placeholder="왜 발생했나요?"
                   style={{ ...S.input, height: 80 }}
                 />
               ) : (
@@ -318,34 +318,34 @@ export default function BMDetailPage() {
             )}
 
             {/* ── Timeline ───────────────────────────────────────── */}
-            <Section title="Timeline / 이력">
+            <Section title="이력">
               <Row
-                label="Reported"
+                label="신고일"
                 value={`${formatDateTime(event.reported_at)}${event.reporter_name ? ` · ${event.reporter_name}` : ''}`}
               />
               {event.downtime_start && (
                 <Row
-                  label="Downtime Start"
+                  label="작동 중단"
                   value={formatDateTime(event.downtime_start)}
                 />
               )}
               {event.resolved_at && (
                 <Row
-                  label="Resolved"
+                  label="완료일"
                   value={`${formatDateTime(event.resolved_at)}${event.resolver_name ? ` · ${event.resolver_name}` : ''}`}
                 />
               )}
               {event.downtime_minutes != null && (
-                <Row label="Downtime" value={`${event.downtime_minutes} 분`} />
+                <Row label="중단 시간" value={`${event.downtime_minutes} 분`} />
               )}
               {event.cause_code && (
-                <Row label="Cause Code" value={event.cause_code} />
+                <Row label="원인 코드" value={event.cause_code} />
               )}
             </Section>
 
             {/* ── Change status — secondary controls ─────────────── */}
             {isAuthed && nextStatuses.length > 0 && (
-              <Section title="Change Status / 상태 변경">
+              <Section title="상태 변경">
                 <div style={S.statusGrid}>
                   {nextStatuses.map(s => {
                     const isResolve = s === 'resolved';
@@ -383,7 +383,7 @@ export default function BMDetailPage() {
               type="button"
               onClick={(e) => { e.stopPropagation(); setLightboxIdx(null); }}
               style={S.lightboxClose}
-              aria-label="Close"
+              aria-label="닫기"
             >×</button>
             <img
               src={photos[lightboxIdx]}

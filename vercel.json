@@ -1,4 +1,18 @@
 {
+  "functions": {
+    "pages/api/reports/quality/generate.js": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "pages/api/bm/import.js": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "pages/api/photos/upload.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/backups/schedule/daily",

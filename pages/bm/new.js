@@ -51,6 +51,13 @@ const T = {
     stepDept: 'Dept', stepType: 'Type', stepAsset: 'Asset', stepDetails: 'Details',
     searchAsset: 'Search asset…',
     noAssets: 'No assets found',
+    progressUploading: 'Uploading photo',
+    progressCreating: 'Creating report…',
+    progressSaving: 'Saving photo links…',
+    progressDone: 'Done.',
+    symptomPlaceholder: 'Sound / smell / error code?',
+    removePhoto: 'Remove',
+    backToBM: 'Back to BM',
   },
   ko: {
     title: '고장 신고',
@@ -86,6 +93,13 @@ const T = {
     stepDept: '부서', stepType: '유형', stepAsset: '자산', stepDetails: '상세입력',
     searchAsset: '자산 검색…',
     noAssets: '자산이 없습니다',
+    progressUploading: '사진 업로드 중',
+    progressCreating: '보고서 생성 중…',
+    progressSaving: '사진 링크 저장 중…',
+    progressDone: '완료',
+    symptomPlaceholder: '음향 / 냄새 / 에러코드?',
+    removePhoto: '제거',
+    backToBM: 'BM 목록으로',
   },
   ta: {
     title: 'கோளாறு அறிக்கை',
@@ -121,6 +135,13 @@ const T = {
     stepDept: 'பிரிவு', stepType: 'வகை', stepAsset: 'சொத்து', stepDetails: 'விவரம்',
     searchAsset: 'சொத்து தேடல்…',
     noAssets: 'சொத்து இல்லை',
+    progressUploading: 'புகைப்படம் பதிவேற்றம்',
+    progressCreating: 'அறிக்கை உருவாக்குகிறது…',
+    progressSaving: 'புகைப்படம் இணைப்பு சேமிக்கிறது…',
+    progressDone: 'முடிந்தது',
+    symptomPlaceholder: 'ஒலி / வாசனை / பிழை குறியீடு?',
+    removePhoto: 'நீக்கு',
+    backToBM: 'BM பட்டியலுக்கு',
   },
   hi: {
     title: 'खराबी रिपोर्ट',
@@ -156,6 +177,13 @@ const T = {
     stepDept: 'विभाग', stepType: 'प्रकार', stepAsset: 'संपत्ति', stepDetails: 'विवरण',
     searchAsset: 'संपत्ति खोजें…',
     noAssets: 'कोई संपत्ति नहीं',
+    progressUploading: 'फ़ोटो अपलोड',
+    progressCreating: 'रिपोर्ट बना रहे हैं…',
+    progressSaving: 'फ़ोटो लिंक सहेज रहे हैं…',
+    progressDone: 'पूर्ण',
+    symptomPlaceholder: 'ध्वनि / गंध / त्रुटि कोड?',
+    removePhoto: 'हटाएं',
+    backToBM: 'BM सूची पर',
   },
 };
 
@@ -444,7 +472,7 @@ export default function NewBMPage() {
     const urls = [];
     for (let i = 0; i < photoFiles.length; i++) {
       const f = photoFiles[i];
-      setProgressMsg(`Uploading photo ${i + 1}/${photoFiles.length}…`);
+      setProgressMsg(`${t.progressUploading} ${i + 1}/${photoFiles.length}…`);
       const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
       const safe = f.name.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60);
       const key = `${eventId}/${Date.now()}-${i}-${safe.endsWith(ext) ? safe : `${safe}.${ext}`}`;
@@ -472,7 +500,7 @@ export default function NewBMPage() {
     const sevDef = SEVERITIES.find(s => s.v === severity) || SEVERITIES[1];
 
     setBusy(true);
-    setProgressMsg('Creating report…');
+    setProgressMsg(t.progressCreating);
     try {
       const payload = {
         asset_id: assetId,
@@ -497,7 +525,7 @@ export default function NewBMPage() {
 
       const urls = await uploadPhotos(ev.id);
       if (urls.length) {
-        setProgressMsg('Saving photo links…');
+        setProgressMsg(t.progressSaving);
         const { error: updErr } = await supabase
           .from('bm_events')
           .update({ photos: urls })
@@ -505,7 +533,7 @@ export default function NewBMPage() {
         if (updErr) console.warn(`[bm-photos] link save failed: ${updErr.message}`);
       }
 
-      setProgressMsg('Done.');
+      setProgressMsg(t.progressDone);
 
       // Fire-and-forget Discord notification
       const selectedAsset = assets.find(a => a.id === assetId);
@@ -551,7 +579,7 @@ export default function NewBMPage() {
       </Head>
       <main style={S.page}>
         <header style={S.header}>
-          <Link href="/bm" style={S.backLink}>← BM</Link>
+          <Link href="/bm" style={S.backLink} aria-label={t.backToBM}>← BM</Link>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={S.title}>{t.title}</h1>
           </div>
@@ -735,7 +763,7 @@ export default function NewBMPage() {
               <textarea
                 value={symptom}
                 onChange={(e) => setSymptom(e.target.value)}
-                placeholder="Sound / smell / error code?"
+                placeholder={t.symptomPlaceholder}
                 style={{ ...S.input, height: 110, fontFamily: 'inherit', resize: 'vertical' }}
                 required
               />
@@ -805,7 +833,7 @@ export default function NewBMPage() {
                         type="button"
                         onClick={() => removePhoto(i)}
                         style={S.photoDel}
-                        aria-label="Remove"
+                        aria-label={t.removePhoto}
                       >×</button>
                     </div>
                   ))}

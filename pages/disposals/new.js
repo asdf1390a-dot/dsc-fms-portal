@@ -349,7 +349,7 @@ export default function DisposalNewPage() {
                         <a href={url} target="_blank" rel="noopener">
                           <img src={url} alt={`photo ${i+1}`} style={S.photoImg} />
                         </a>
-                        <button type="button" onClick={() => removePhoto(url)} style={S.tileDelBtn} aria-label="Delete">×</button>
+                        <button type="button" onClick={() => removePhoto(url)} style={S.tileDelBtn} aria-label="삭제">×</button>
                       </div>
                     ))}
                   </div>
@@ -367,7 +367,7 @@ export default function DisposalNewPage() {
                     {files.map(f => (
                       <li key={f.url} style={S.fileItem}>
                         <a href={f.url} target="_blank" rel="noopener" style={S.fileLink}>📄 {f.name}</a>
-                        <button type="button" onClick={() => removeFile(f.url)} style={S.fileDelBtn} aria-label="Delete">×</button>
+                        <button type="button" onClick={() => removeFile(f.url)} style={S.fileDelBtn} aria-label="삭제">×</button>
                       </li>
                     ))}
                   </ul>

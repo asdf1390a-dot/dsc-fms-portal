@@ -92,15 +92,15 @@ export default function DisposalsListPage() {
       </Head>
       <main style={S.page}>
         <header style={S.header}>
-          <Link href="/" style={S.backLink} aria-label="Home">← Home</Link>
+          <Link href="/" style={S.backLink} aria-label="홈">← 홈</Link>
           <h1 style={S.title}>고정자산 처분</h1>
           <div style={S.headerRight}>
             {isAuthed ? (
-              <button onClick={signOut} style={S.userChip} title={fullName || 'logged in'}>
+              <button onClick={signOut} style={S.userChip} title={fullName || '로그인됨'}>
                 {employeeId || '✓'}
               </button>
             ) : (
-              <Link href="/login" style={S.loginLink}>Sign in</Link>
+              <Link href="/login" style={S.loginLink}>로그인</Link>
             )}
           </div>
         </header>
@@ -136,7 +136,7 @@ export default function DisposalsListPage() {
             inputMode="search"
           />
           {search && (
-            <button type="button" onClick={() => setSearch('')} style={S.searchClear} aria-label="Clear">×</button>
+            <button type="button" onClick={() => setSearch('')} style={S.searchClear} aria-label="초기화">×</button>
           )}
         </div>
 
