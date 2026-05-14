@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { LanguageProvider } from '@/lib/i18n/context'
+import './globals.css'
 
 export const metadata: Metadata = {
   title: 'DSC FMS Portal',
@@ -12,7 +14,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <LanguageProvider>
+          {children}
+        </LanguageProvider>
+      </body>
     </html>
   )
 }

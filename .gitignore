@@ -27,3 +27,4 @@ Thumbs.db
 
 # vercel
 .vercel
+apply-backup-migration.mjs

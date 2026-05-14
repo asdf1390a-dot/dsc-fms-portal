@@ -14,6 +14,11 @@ export interface Asset {
   qr_payload?: string;
   photos: string[];
   remark?: string;
+  disposal_reason?: string;
+  disposal_price?: number;
+  buyer_name?: string;
+  buyer_contact?: string;
+  disposed_at?: string;
   extra?: Record<string, any>;
   created_at: string;
   updated_at: string;
