@@ -51,6 +51,57 @@ export default function QualityReportPage() {
     if (user) loadHistory();
   }, [user]);
 
+  // ── Chunked upload (Vercel free tier 4.5MB body limit workaround) ──
+  // Slice each file into ≤4MB chunks, POST sequentially to chunk-upload,
+  // then finalize. Retries 3× per chunk before giving up.
+  const CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB
+  const MAX_RETRY = 3;
+
+  function newUploadId() {
+    return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+
+  async function postChunk(token, body) {
+    let lastErr = null;
+    for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+      try {
+        const r = await fetch('/api/reports/quality/chunk-upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body,
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.detail || j.error || `HTTP ${r.status}`);
+        return j;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < MAX_RETRY) {
+          await new Promise(res => setTimeout(res, 400 * attempt));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
+  async function uploadFileInChunks({ token, uploadId, fileKey, file, onProgress }) {
+    const total = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+    for (let i = 0; i < total; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const blob = file.slice(start, end);
+      const fd = new FormData();
+      fd.append('upload_id', uploadId);
+      fd.append('file_key', fileKey);
+      fd.append('chunk_index', String(i));
+      fd.append('total_chunks', String(total));
+      if (i === 0) fd.append('file_name', file.name || '');
+      fd.append('chunk', blob, `${fileKey}.${i}.bin`);
+      // eslint-disable-next-line no-await-in-loop
+      await postChunk(token, fd);
+      if (onProgress) onProgress(i + 1, total);
+    }
+  }
+
   async function onGenerate() {
     if (!canGenerate) return;
     setBusy(true); setError(null); setResult(null);
@@ -60,17 +111,38 @@ export default function QualityReportPage() {
       const token = session?.access_token;
       if (!token) throw new Error('로그인이 필요합니다');
 
-      setStep('파일 업로드 + 보고서 생성 중… (수십초 소요)');
-      const fd = new FormData();
-      fd.append('target_month', targetMonth);
-      fd.append('prev_excel', prevExcel);
-      fd.append('prev_ppt',   prevPpt);
-      fd.append('data_excel', dataExcel);
+      const uploadId = newUploadId();
+      const fileList = [
+        { key: 'prev_excel', file: prevExcel, label: '① 전월 Excel' },
+        { key: 'prev_ppt',   file: prevPpt,   label: '② 전월 PPT'   },
+        { key: 'data_excel', file: dataExcel, label: '③ 현월 데이터' },
+      ];
 
-      const r = await fetch('/api/reports/quality/generate', {
+      for (let fi = 0; fi < fileList.length; fi++) {
+        const { key, file, label } = fileList[fi];
+        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+        setStep(`${label} 업로드 중… (${sizeMB} MB)`);
+        // eslint-disable-next-line no-await-in-loop
+        await uploadFileInChunks({
+          token,
+          uploadId,
+          fileKey: key,
+          file,
+          onProgress: (done, total) => {
+            setStep(`${label} 업로드 중… ${done}/${total} 청크 (${sizeMB} MB)`);
+          },
+        });
+      }
+
+      setStep('보고서 생성 중… (수십초 소요)');
+      const finalizeFd = new FormData();
+      finalizeFd.append('upload_id', uploadId);
+      finalizeFd.append('finalize', 'true');
+      finalizeFd.append('target_month', targetMonth);
+      const r = await fetch('/api/reports/quality/chunk-upload', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
-        body: fd,
+        body: finalizeFd,
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.detail || j.error || `HTTP ${r.status}`);
