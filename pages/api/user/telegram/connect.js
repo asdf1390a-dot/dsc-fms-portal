@@ -3,7 +3,7 @@
 // Request: { telegram_chat_id, telegram_username? }
 // Response: { success, telegram: { chat_id, username, connected_at, is_active } }
 
-import { supabaseAdmin } from '../../../../lib/supabaseAdmin';
+import { supabaseAdmin } from '../../../../lib/supabase-admin';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
