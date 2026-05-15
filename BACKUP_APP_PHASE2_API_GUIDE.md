@@ -32,9 +32,14 @@ This guide provides the exact API endpoints, request/response formats, and imple
 │   ├── daily.js             [POST]     — Cron trigger (internal)
 │   └── manual.js            [POST]     — Manual cleanup
 │
-└── notifications/
-    ├── list.js              [GET]      — List notifications
-    └── [id]/read.js         [PUT]      — Mark as read
+├── notifications/
+│   ├── list.js              [GET]      — List notifications
+│   └── [id]/read.js         [PUT]      — Mark as read
+│
+└── user/
+    ├── telegram/
+    │   ├── connect.js       [POST]     — Connect Telegram account
+    │   └── disconnect.js    [POST]     — Disconnect Telegram account
 ```
 
 ---
@@ -322,11 +327,17 @@ export default async function handler(req, res) {
 
 Scheduled daily backup trigger. Called by Vercel Cron or external scheduler.
 
+**Timeout Handling:**
+- Backups running longer than 30 minutes are marked as 'failed' and cleaned up
+- A separate cron job runs every 3 hours to detect stale backups
+
 **Implementation:**
 ```javascript
 // pages/api/backup/schedule/daily.js
 
 import { createDailyBackup } from '@/lib/backup/createDailyBackup';
+
+const BACKUP_TIMEOUT_MINUTES = 30;
 
 export default async function handler(req, res) {
   // Verify cron secret
@@ -337,6 +348,26 @@ export default async function handler(req, res) {
   }
 
   try {
+    // 0. Check and cleanup stale backups (older than 30 min)
+    const staleThreshold = new Date(Date.now() - BACKUP_TIMEOUT_MINUTES * 60 * 1000);
+    const { data: staleBackups } = await supabaseAdmin
+      .from('backups')
+      .select('id, user_id')
+      .eq('status', 'in_progress')
+      .lt('created_at', staleThreshold.toISOString());
+
+    for (const backup of staleBackups || []) {
+      await supabaseAdmin
+        .from('backups')
+        .update({
+          status: 'failed',
+          metadata: {
+            failure_reason: 'timeout_exceeded_30_minutes'
+          }
+        })
+        .eq('id', backup.id);
+    }
+
     // 1. Get all users with backup enabled
     const { data: policies } = await supabaseAdmin
       .from('backup_policies')
@@ -366,6 +397,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       results,
+      stale_backups_cleaned: staleBackups?.length || 0,
       timestamp: new Date().toISOString()
     });
 
@@ -376,7 +408,6 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString()
     });
   }
-}
 
 // Add to vercel.json:
 // {
@@ -414,7 +445,21 @@ fetch('/api/backup/quota/status', {
     "is_warning": false,
     "is_exceeded": false,
     "plan_type": "standard",
-    "last_calculated_at": "2026-05-13T10:00:00Z"
+    "last_calculated_at": "2026-05-13T10:00:00Z",
+    "expiring_soon": [
+      {
+        "backup_id": "uuid-1",
+        "name": "Auto Backup 2026-05-09",
+        "size_bytes": 1241513984,
+        "days_until_deletion": 5
+      },
+      {
+        "backup_id": "uuid-2",
+        "name": "Manual Backup 2026-05-08",
+        "size_bytes": 1181116007,
+        "days_until_deletion": 4
+      }
+    ]
   }
 }
 ```
@@ -455,7 +500,7 @@ export default async function handler(req, res) {
     // 2. Calculate current usage
     const { data: backups } = await supabaseAdmin
       .from('backups')
-      .select('size_bytes')
+      .select('id, name, size_bytes, created_at')
       .eq('user_id', user.id)
       .eq('status', 'completed');
 
@@ -466,9 +511,37 @@ export default async function handler(req, res) {
 
     const { data: policy } = await supabaseAdmin
       .from('backup_policies')
-      .select('warning_threshold_percent')
+      .select('warning_threshold_percent, retention_days')
       .eq('user_id', user.id)
       .single();
+
+    // 3. Calculate expiring_soon (within next 7 days)
+    const expiringCutoff = new Date();
+    expiringCutoff.setDate(expiringCutoff.getDate() + 7);
+    
+    const expiringBackups = backups
+      ?.filter(b => {
+        const createdDate = new Date(b.created_at);
+        const expiryDate = new Date(createdDate);
+        expiryDate.setDate(expiryDate.getDate() + (policy?.retention_days || 90));
+        
+        return expiryDate <= expiringCutoff && expiryDate > new Date();
+      })
+      .map(b => {
+        const createdDate = new Date(b.created_at);
+        const expiryDate = new Date(createdDate);
+        expiryDate.setDate(expiryDate.getDate() + (policy?.retention_days || 90));
+        
+        const daysUntil = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
+        
+        return {
+          backup_id: b.id,
+          name: b.name,
+          size_bytes: b.size_bytes,
+          days_until_deletion: daysUntil
+        };
+      })
+      .sort((a, b) => a.days_until_deletion - b.days_until_deletion) || [];
 
     return res.status(200).json({
       success: true,
@@ -480,7 +553,8 @@ export default async function handler(req, res) {
         is_warning: percentage >= (policy?.warning_threshold_percent || 80),
         is_exceeded: usedBytes > quota.max_storage_bytes,
         plan_type: quota.plan_type,
-        last_calculated_at: quota.last_calculated_at
+        last_calculated_at: quota.last_calculated_at,
+        expiring_soon: expiringBackups
       }
     });
 
@@ -613,9 +687,9 @@ fetch('/api/backup/metrics/summary?days=30', {
     "successful": 27,
     "failed": 1,
     "success_rate": 96,
-    "total_size_gb": 31.2,
-    "avg_daily_size_gb": 1.04,
-    "latest_backup_gb": 1.3
+    "total_size_bytes": 33548804341,
+    "avg_daily_size_bytes": 1118293478,
+    "latest_backup_bytes": 1396477458
   }
 }
 ```
@@ -675,8 +749,7 @@ export default async function handler(req, res) {
       ? Math.round((successfulBackups / totalBackups) * 100)
       : 0;
 
-    const totalSizeGB = totalSizeBytes / (1024 ** 3);
-    const avgDailySizeGB = totalSizeGB / daysNum;
+    const avgDailySizeBytes = totalSizeBytes / daysNum;
 
     // 3. Get largest backup
     const { data: backups } = await supabaseAdmin
@@ -687,9 +760,7 @@ export default async function handler(req, res) {
       .order('size_bytes', { ascending: false })
       .limit(1);
 
-    const largestBackupGB = backups?.[0]?.size_bytes 
-      ? (backups[0].size_bytes / (1024 ** 3)) 
-      : 0;
+    const largestBackupBytes = backups?.[0]?.size_bytes || 0;
 
     return res.status(200).json({
       success: true,
@@ -699,9 +770,9 @@ export default async function handler(req, res) {
         successful: successfulBackups,
         failed: failedBackups,
         success_rate: successRate,
-        total_size_gb: Math.round(totalSizeGB * 100) / 100,
-        avg_daily_size_gb: Math.round(avgDailySizeGB * 100) / 100,
-        latest_backup_gb: Math.round(largestBackupGB * 100) / 100
+        total_size_bytes: totalSizeBytes,
+        avg_daily_size_bytes: Math.round(avgDailySizeBytes),
+        latest_backup_bytes: largestBackupBytes
       }
     });
 
@@ -1273,6 +1344,175 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Mark read error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+```
+
+---
+
+## 6. User Settings — Telegram Integration
+
+### 6.1 POST /api/user/telegram/connect
+
+Connect or update Telegram account for backup notifications.
+
+**Request:**
+```javascript
+{
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer {token}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    telegram_chat_id: '123456789',  // User's Telegram chat ID
+    telegram_username: '@johndoe'   // Optional, for reference
+  })
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "telegram": {
+    "chat_id": "123456789",
+    "username": "@johndoe",
+    "connected_at": "2026-05-13T10:00:00Z",
+    "is_active": true
+  }
+}
+```
+
+**Implementation:**
+```javascript
+// pages/api/user/telegram/connect.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { authorization } = req.headers;
+  if (!authorization) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const token = authorization.replace('Bearer ', '');
+  const { data: user, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  try {
+    const { telegram_chat_id, telegram_username } = req.body;
+
+    if (!telegram_chat_id || telegram_chat_id.toString().trim() === '') {
+      return res.status(400).json({ error: 'telegram_chat_id is required' });
+    }
+
+    // Upsert Telegram connection
+    const { data: profile, error } = await supabaseAdmin
+      .from('profiles')
+      .upsert(
+        {
+          id: user.id,
+          telegram_chat_id: telegram_chat_id.toString(),
+          telegram_username: telegram_username || null,
+          telegram_connected_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'id' }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      success: true,
+      telegram: {
+        chat_id: profile.telegram_chat_id,
+        username: profile.telegram_username,
+        connected_at: profile.telegram_connected_at,
+        is_active: !!profile.telegram_chat_id
+      }
+    });
+
+  } catch (error) {
+    console.error('Telegram connect error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+```
+
+### 6.2 POST /api/user/telegram/disconnect
+
+Disconnect Telegram account.
+
+**Request:**
+```javascript
+{
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer {token}',
+    'Content-Type': 'application/json'
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Telegram account disconnected"
+}
+```
+
+**Implementation:**
+```javascript
+// pages/api/user/telegram/disconnect.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { authorization } = req.headers;
+  if (!authorization) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const token = authorization.replace('Bearer ', '');
+  const { data: user, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  try {
+    // Clear Telegram settings
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        telegram_chat_id: null,
+        telegram_username: null,
+        telegram_connected_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id);
+
+    if (error) throw error;
+
+    return res.status(200).json({
+      success: true,
+      message: 'Telegram account disconnected'
+    });
+
+  } catch (error) {
+    console.error('Telegram disconnect error:', error);
     return res.status(500).json({ error: error.message });
   }
 }

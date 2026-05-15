@@ -1293,6 +1293,150 @@ export default function BackupMetrics({ userId }) {
 
 ---
 
+## 6.5 초기 로드 성능 최적화 (Performance)
+
+### 병렬 데이터 로드 (Promise.all)
+
+Dashboard 진입 시 4개 API를 순차 호출하면 느림. 반드시 Promise.all()을 사용하여 병렬화:
+
+**❌ 피해야 할 코드 (순차 호출 — 느림):**
+```javascript
+// pages/backup/index.js (X 잘못된 방식)
+
+const policy = await fetch('/api/backup/schedule/configure').then(r => r.json());
+const quota = await fetch('/api/backup/quota/status').then(r => r.json());
+const metrics = await fetch('/api/backup/metrics/summary').then(r => r.json());
+const notifications = await fetch('/api/backup/notifications/list').then(r => r.json());
+// 총 소요시간: 800ms + 600ms + 700ms + 500ms = ~2600ms (느림!)
+```
+
+**✅ 권장 코드 (병렬 호출 — 빠름):**
+```javascript
+// pages/backup/index.js (O 권장 방식)
+
+const [policy, quota, metrics, notifications] = await Promise.all([
+  fetch('/api/backup/schedule/configure').then(r => r.json()),
+  fetch('/api/backup/quota/status').then(r => r.json()),
+  fetch('/api/backup/metrics/summary').then(r => r.json()),
+  fetch('/api/backup/notifications/list').then(r => r.json())
+]);
+// 총 소요시간: 약 800ms (병렬 처리로 최대값만 소요)
+```
+
+**React 컴포넌트에서 사용:**
+```javascript
+import { useEffect, useState } from 'react';
+
+export default function BackupDashboard() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [policyRes, quotaRes, metricsRes, notificationsRes] = await Promise.all([
+          fetch('/api/backup/schedule/configure', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('/api/backup/quota/status', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('/api/backup/metrics/summary', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('/api/backup/notifications/list', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ]);
+
+        const [policy, quota, metrics, notifications] = await Promise.all([
+          policyRes.json(),
+          quotaRes.json(),
+          metricsRes.json(),
+          notificationsRes.json()
+        ]);
+
+        setData({ policy, quota, metrics, notifications });
+      } catch (error) {
+        console.error('Failed to load dashboard:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [token]);
+
+  if (loading) return <div>Loading...</div>;
+  if (!data) return <div>Error loading data</div>;
+
+  return (
+    <div>
+      <AutoBackupSettings policy={data.policy} />
+      <StorageManagement quota={data.quota} />
+      <BackupMetrics metrics={data.metrics} />
+      <NotificationSettings notifications={data.notifications} />
+    </div>
+  );
+}
+```
+
+### 모바일 반응형 디자인 (Responsive Breakpoints)
+
+```
+기본 breakpoint 정의:
+┌────────────────────────────────────────┐
+│ 모바일 (Mobile)        < 640px          │ 1열 레이아웃
+│ 태블릿 (Tablet)  640px ~ 1024px       │ 2열 레이아웃
+│ 데스크탑 (Desktop)    > 1024px         │ 3-4열 레이아웃
+└────────────────────────────────────────┘
+```
+
+**Tailwind CSS 예시:**
+```html
+<!-- 모바일: 1열, 태블릿: 2열, 데스크탑: 3열 -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  <AutoBackupSettings />
+  <StorageManagement />
+  <BackupMetrics />
+</div>
+```
+
+### 진행률 바 색상 규약 (Progress Bar Color Scheme)
+
+```
+저장소 사용량:
+┌─────────────────────────────────────────┐
+│ 0% ~ 70%  → 초록색 (Safe)               │ #10b981 (emerald-500)
+│ 70% ~ 90% → 주황색 (Warning)            │ #f59e0b (amber-500)
+│ 90% ~ 100% → 빨간색 (Danger)            │ #ef4444 (red-500)
+└─────────────────────────────────────────┘
+```
+
+**React 컴포넌트:**
+```javascript
+export function StorageProgressBar({ used, max }) {
+  const percentage = (used / max) * 100;
+  
+  const getColor = () => {
+    if (percentage < 70) return 'bg-emerald-500';
+    if (percentage < 90) return 'bg-amber-500';
+    return 'bg-red-500';
+  };
+
+  return (
+    <div className="w-full bg-gray-200 rounded-full h-2">
+      <div
+        className={`h-2 rounded-full transition-all ${getColor()}`}
+        style={{ width: `${Math.min(percentage, 100)}%` }}
+      />
+    </div>
+  );
+}
+```
+
+---
+
 ## 7. API 엔드포인트 추가 사항
 
 ### 7.1 자동 백업 관련
