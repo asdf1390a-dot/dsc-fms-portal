@@ -36,6 +36,20 @@ This guide provides the exact API endpoints, request/response formats, and imple
 │   ├── list.js              [GET]      — List notifications
 │   └── [id]/read.js         [PUT]      — Mark as read
 │
+├── audit/                          ⭐ **평가자용 검증 API**
+│   ├── validate/
+│   │   ├── api-response-time.js    [POST] — Test API response time
+│   │   ├── restore-test.js         [POST] — Execute restore test
+│   │   └── storage-connectivity.js [POST] — Verify storage connectivity
+│   │
+│   ├── metrics/
+│   │   ├── audit-summary.js        [GET]  — Get today's audit metrics
+│   │   └── daily-report.js         [GET]  — Get daily report (with status)
+│   │
+│   └── logs/
+│       ├── validation-history.js   [GET]  — List validation test history
+│       └── [id]/details.js         [GET]  — Get validation test details
+│
 └── user/
     ├── telegram/
     │   ├── connect.js       [POST]     — Connect Telegram account
@@ -1520,6 +1534,615 @@ export default async function handler(req, res) {
 
 ---
 
+## 7. Audit & Evaluator Validation APIs ⭐
+
+These endpoints are for the **evaluator** AI team member to perform daily/weekly/monthly validation checks.
+
+### 7.1 POST /api/backup/audit/validate/api-response-time
+
+Test backup API endpoint response time for SLA compliance (target: < 2 seconds).
+
+**Request:**
+```javascript
+{
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer {token}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    endpoint: '/api/backup/quota/status',  // API to test
+    iterations: 5,  // Run test N times
+    timeout_ms: 5000
+  })
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "endpoint": "/api/backup/quota/status",
+  "test_date": "2026-05-15T03:30:00Z",
+  "metrics": {
+    "min_response_ms": 145,
+    "max_response_ms": 280,
+    "avg_response_ms": 198,
+    "median_response_ms": 185,
+    "p99_response_ms": 275
+  },
+  "status": "passed",  // passed | warning | failed
+  "sla_target_ms": 2000,
+  "sla_compliance": true,
+  "test_details": [
+    { "iteration": 1, "response_ms": 145, "status": 200 },
+    { "iteration": 2, "response_ms": 198, "status": 200 },
+    // ...
+  ]
+}
+```
+
+**Implementation:**
+```javascript
+// pages/api/backup/audit/validate/api-response-time.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { authorization } = req.headers;
+  if (!authorization) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  // Verify evaluator role (add to user profiles)
+  const token = authorization.replace('Bearer ', '');
+  const { data: user, error: authError } = await supabaseAdmin.auth.getUser(token);
+  
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  try {
+    const { endpoint, iterations = 5, timeout_ms = 5000 } = req.body;
+
+    if (!endpoint) {
+      return res.status(400).json({ error: 'endpoint is required' });
+    }
+
+    const results = [];
+    const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL.replace('/rest/v1', '');
+
+    for (let i = 0; i < iterations; i++) {
+      const startTime = Date.now();
+      try {
+        const response = await fetch(`${baseUrl}${endpoint}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: AbortSignal.timeout(timeout_ms)
+        });
+        const responseTime = Date.now() - startTime;
+
+        results.push({
+          iteration: i + 1,
+          response_ms: responseTime,
+          status: response.status
+        });
+      } catch (error) {
+        results.push({
+          iteration: i + 1,
+          response_ms: timeout_ms,
+          status: 'timeout',
+          error: error.message
+        });
+      }
+    }
+
+    const responseTimes = results
+      .filter(r => r.status !== 'timeout')
+      .map(r => r.response_ms)
+      .sort((a, b) => a - b);
+
+    const metrics = {
+      min_response_ms: Math.min(...responseTimes),
+      max_response_ms: Math.max(...responseTimes),
+      avg_response_ms: Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length),
+      median_response_ms: responseTimes[Math.floor(responseTimes.length / 2)],
+      p99_response_ms: responseTimes[Math.floor(responseTimes.length * 0.99)]
+    };
+
+    const slaTarget = 2000;
+    const passed = metrics.p99_response_ms <= slaTarget;
+
+    // Log validation result
+    await supabaseAdmin
+      .from('audit_validation_logs')
+      .insert({
+        user_id: user.id,
+        validation_type: 'api_response_time',
+        endpoint: endpoint,
+        metrics: metrics,
+        status: passed ? 'passed' : 'warning',
+        test_date: new Date().toISOString(),
+        test_details: results
+      });
+
+    return res.status(200).json({
+      success: true,
+      endpoint,
+      test_date: new Date().toISOString(),
+      metrics,
+      status: passed ? 'passed' : 'warning',
+      sla_target_ms: slaTarget,
+      sla_compliance: passed,
+      test_details: results
+    });
+
+  } catch (error) {
+    console.error('API response time test error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+```
+
+### 7.2 POST /api/backup/audit/validate/restore-test
+
+Execute a restore test to verify backup integrity and recoverability (target: 100% pass rate).
+
+**Request:**
+```javascript
+{
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer {token}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    backup_id: 'uuid',        // Backup to test
+    test_type: 'sample',      // sample | full
+    sample_files: 5           // Number of files to validate (if test_type = sample)
+  })
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "backup_id": "uuid",
+  "test_type": "sample",
+  "test_date": "2026-05-15T03:30:00Z",
+  "status": "passed",  // passed | failed
+  "metrics": {
+    "total_files": 156,
+    "files_tested": 5,
+    "files_passed": 5,
+    "files_failed": 0,
+    "data_integrity_check": "passed",
+    "compression_valid": true,
+    "restore_time_seconds": 12.4
+  },
+  "issues": []  // Array of any issues found
+}
+```
+
+**Implementation:**
+```javascript
+// pages/api/backup/audit/validate/restore-test.js
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const token = authorization.replace('Bearer ', '');
+  const { data: user, error: authError } = await supabaseAdmin.auth.getUser(token);
+  
+  if (authError || !user) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+
+  try {
+    const { backup_id, test_type = 'sample', sample_files = 5 } = req.body;
+
+    if (!backup_id) {
+      return res.status(400).json({ error: 'backup_id is required' });
+    }
+
+    // Get backup metadata
+    const { data: backup, error: backupError } = await supabaseAdmin
+      .from('backups')
+      .select('*')
+      .eq('id', backup_id)
+      .eq('user_id', user.id)
+      .single();
+
+    if (backupError || !backup) {
+      return res.status(404).json({ error: 'Backup not found' });
+    }
+
+    const issues = [];
+    const startTime = Date.now();
+
+    // 1. Verify file exists in storage
+    const { data: files } = await supabaseAdmin
+      .storage
+      .from('backup_files')
+      .list(`${user.id}/${backup.id}`);
+
+    if (!files || files.length === 0) {
+      issues.push('No files found in backup storage');
+    }
+
+    // 2. Test decompression (sample or full)
+    const filesToTest = test_type === 'sample' 
+      ? files.slice(0, Math.min(sample_files, files.length))
+      : files;
+
+    let filesPassed = 0;
+    let filesFailed = 0;
+
+    for (const file of filesToTest) {
+      try {
+        const { data: fileData } = await supabaseAdmin
+          .storage
+          .from('backup_files')
+          .download(`${user.id}/${backup.id}/${file.name}`);
+
+        // Test decompression
+        const decompressed = await decompressGzip(fileData);
+        
+        if (decompressed && decompressed.byteLength > 0) {
+          filesPassed++;
+        } else {
+          filesFailed++;
+          issues.push(`File ${file.name}: decompression failed`);
+        }
+      } catch (error) {
+        filesFailed++;
+        issues.push(`File ${file.name}: ${error.message}`);
+      }
+    }
+
+    const restoreTime = (Date.now() - startTime) / 1000;
+    const passed = filesFailed === 0;
+
+    // Log validation result
+    await supabaseAdmin
+      .from('audit_validation_logs')
+      .insert({
+        user_id: user.id,
+        validation_type: 'restore_test',
+        backup_id: backup_id,
+        metrics: {
+          total_files: files.length,
+          files_tested: filesToTest.length,
+          files_passed: filesPassed,
+          files_failed: filesFailed,
+          data_integrity_check: passed ? 'passed' : 'failed',
+          compression_valid: true,
+          restore_time_seconds: restoreTime
+        },
+        status: passed ? 'passed' : 'failed',
+        test_date: new Date().toISOString(),
+        issues: issues
+      });
+
+    return res.status(200).json({
+      success: true,
+      backup_id,
+      test_type,
+      test_date: new Date().toISOString(),
+      status: passed ? 'passed' : 'failed',
+      metrics: {
+        total_files: files.length,
+        files_tested: filesToTest.length,
+        files_passed: filesPassed,
+        files_failed: filesFailed,
+        data_integrity_check: passed ? 'passed' : 'failed',
+        compression_valid: true,
+        restore_time_seconds: restoreTime
+      },
+      issues
+    });
+
+  } catch (error) {
+    console.error('Restore test error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+```
+
+### 7.3 GET /api/backup/audit/metrics/audit-summary
+
+Get today's audit metrics summary for the evaluator daily standup.
+
+**Request:**
+```javascript
+{
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer {token}'
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "date": "2026-05-15",
+  "metrics": {
+    "success_rate": 96.0,
+    "retention_compliance": 100.0,
+    "availability_score": 99.2,
+    "reliability_score": 99.6
+  },
+  "status": "healthy",  // healthy | warning | critical
+  "evaluator_required": false,
+  "validation_tests": {
+    "api_response_time": {
+      "status": "passed",
+      "last_tested": "2026-05-15T03:30:00Z",
+      "avg_response_ms": 198,
+      "sla_compliant": true
+    },
+    "restore_test": {
+      "status": "passed",
+      "last_tested": "2026-05-15T03:45:00Z",
+      "files_passed": 5,
+      "files_failed": 0
+    },
+    "storage_connectivity": {
+      "status": "passed",
+      "last_tested": "2026-05-15T03:50:00Z",
+      "connection_time_ms": 125
+    }
+  }
+}
+```
+
+**Implementation:**
+```javascript
+// pages/api/backup/audit/metrics/audit-summary.js
+
+export default async function handler(req, res) {
+  // ... implementation similar to above
+}
+```
+
+### 7.4 GET /api/backup/audit/logs/validation-history
+
+Get validation test history for review.
+
+**Request:**
+```javascript
+{
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer {token}'
+  },
+  query: {
+    days: 7,  // Last N days
+    validation_type: 'api_response_time'  // Optional filter
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "logs": [
+    {
+      "id": "uuid",
+      "validation_type": "api_response_time",
+      "test_date": "2026-05-15T03:30:00Z",
+      "status": "passed",
+      "metrics": { ... }
+    },
+    // ... more logs
+  ]
+}
+```
+
+---
+
+## 8. Analytics APIs (Data Analyst) ⭐
+
+These endpoints support the **data-analyst** team member for trend analysis, forecasting, and reporting.
+
+### 8.1 GET /api/backup/analytics/trends
+
+Get backup size trends for the past N days.
+
+**Request:**
+```javascript
+{
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer {token}'
+  },
+  query: {
+    user_id: 'uuid',
+    days: 90,
+    group_by: 'daily'  // daily | weekly | monthly
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "period_days": 90,
+  "group_by": "daily",
+  "daily_data": [
+    {
+      "date": "2026-05-15",
+      "daily_count": 28,
+      "total_size_gb": 45.3,
+      "avg_backup_size_gb": 1.62,
+      "max_backup_size_gb": 3.2,
+      "min_backup_size_gb": 0.8,
+      "compression_ratio": 0.58,
+      "success_rate": 96.0
+    },
+    // ... more data
+  ],
+  "weekly_summary": {
+    "week_of": "2026-05-11",
+    "avg_size_gb": 44.8,
+    "growth_percent": 2.3,
+    "trend": "increasing"
+  },
+  "monthly_summary": {
+    "month": "2026-05",
+    "total_size_gb": 526.0,
+    "avg_daily_gb": 17.5,
+    "growth_percent": 5.2,
+    "trend": "increasing"
+  }
+}
+```
+
+### 8.2 GET /api/backup/analytics/storage-quota
+
+Get storage quota status and projections.
+
+**Request:**
+```javascript
+{
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer {token}'
+  },
+  query: {
+    user_id: 'uuid'
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "current_usage": {
+    "gb": 18.5,
+    "percent": 46.3
+  },
+  "quota_trend": {
+    "7day_avg_growth": 0.26,
+    "30day_avg_growth": 0.24,
+    "projected_full_date": "2026-10-22",
+    "recommendation": "monitor",  // monitor | upgrade_recommended | urgent
+    "days_until_full": 157
+  },
+  "quota_history": [
+    {
+      "date": "2026-05-15",
+      "usage_gb": 18.5,
+      "change_percent": 0.3
+    },
+    // ... historical data
+  ]
+}
+```
+
+### 8.3 GET /api/backup/analytics/compression
+
+Get compression efficiency metrics.
+
+**Request:**
+```javascript
+{
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer {token}'
+  },
+  query: {
+    user_id: 'uuid',
+    days: 30
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "period_days": 30,
+  "compression_metrics": {
+    "avg_compression_ratio": 0.58,
+    "best_ratio": 0.72,
+    "worst_ratio": 0.42,
+    "total_original_bytes": 1099511627776,  // 1 TB
+    "total_compressed_bytes": 274877906944,  // ~250 GB
+    "space_saved_percent": 42,
+    "avg_compression_time_seconds": 45,
+    "avg_decompression_time_seconds": 38
+  },
+  "algorithm_analysis": {
+    "algorithm": "gzip",
+    "level": 9,
+    "performance": "optimal"
+  },
+  "recommendations": [
+    "Current gzip compression is performing well",
+    "Consider level 8 if speed is prioritized over compression"
+  ]
+}
+```
+
+### 8.4 GET /api/backup/analytics/patterns
+
+Get usage patterns for forecasting.
+
+**Request:**
+```javascript
+{
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer {token}'
+  },
+  query: {
+    user_id: 'uuid',
+    days: 30,
+    analysis_type: 'hourly'  // hourly | daily | weekly
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "analysis_type": "hourly",
+  "period_days": 30,
+  "hourly_distribution": {
+    "00": { "count": 21, "percent": 7.0, "peak": false },
+    "01": { "count": 18, "percent": 6.0, "peak": false },
+    "02": { "count": 280, "percent": 93.3, "peak": true },  // Auto backup time
+    // ... 22 more hours
+  },
+  "daily_distribution": {
+    "Monday": { "count": 156, "percent": 14.3, "peak": false },
+    "Tuesday": { "count": 168, "percent": 15.4, "peak": false },
+    "Wednesday": { "count": 162, "percent": 14.8, "peak": false },
+    "Thursday": { "count": 196, "percent": 17.9, "peak": true },
+    // ... more days
+  },
+  "peak_hours": [2, 3],
+  "peak_days": ["Thursday", "Friday"],
+  "recommendations": [
+    "Schedule maintenance outside peak times (02:00-03:00 KST)",
+    "Backup size increases on weekends (+3.2%)"
+  ]
+}
+```
+
+---
+
 ## Vercel Configuration
 
 Add to `vercel.json`:
@@ -1529,19 +2152,51 @@ Add to `vercel.json`:
   "crons": [
     {
       "path": "/api/backup/schedule/daily",
-      "schedule": "0 2 * * *"
+      "schedule": "0 2 * * *",
+      "description": "Trigger daily backups at 02:00 KST"
     },
     {
       "path": "/api/backup/cleanup/daily",
-      "schedule": "5 2 * * *"
+      "schedule": "5 2 * * *",
+      "description": "Cleanup expired backups at 02:05 KST"
     },
     {
       "path": "/api/backup/metrics/update-usage",
-      "schedule": "0 3 * * *"
+      "schedule": "0 3 * * *",
+      "description": "Update storage usage metrics at 03:00 KST"
+    },
+    {
+      "path": "/api/backup/audit/metrics/collect",
+      "schedule": "30 3 * * *",
+      "description": "Collect audit metrics for evaluator (비서 자동화) at 03:30 KST"
+    },
+    {
+      "path": "/api/backup/analytics/generate-reports",
+      "schedule": "0 4 * * *",
+      "description": "Generate daily analytics report for data-analyst at 04:00 KST"
+    },
+    {
+      "path": "/api/backup/analytics/weekly-summary",
+      "schedule": "0 5 * * 5",
+      "description": "Generate weekly analytics summary (Friday 05:00 KST)"
+    },
+    {
+      "path": "/api/backup/analytics/monthly-summary",
+      "schedule": "0 6 1 * *",
+      "description": "Generate monthly analytics summary (1st day of month at 06:00 KST)"
     }
   ]
 }
 ```
+
+**Cron Schedule Explanation (KST timezone):**
+- 02:00 KST (20:30 IST prev day): Daily backup trigger
+- 02:05 KST (20:35 IST prev day): Cleanup expired backups
+- 03:00 KST (21:30 IST prev day): Update storage usage
+- **03:30 KST (22:00 IST prev day): Collect audit metrics** ⭐ (비서 자동화)
+- **04:00 KST (22:30 IST prev day): Generate daily analytics** ⭐ (데이터분석가)
+- **05:00 KST Fridays: Generate weekly summary** ⭐ (평가자 주간 검토)
+- **06:00 KST 1st of month: Generate monthly summary** ⭐ (평가자 월간 감사)
 
 ---
 

@@ -120,6 +120,37 @@ create table if not exists public.backup_metrics (
 create index if not exists backup_metrics_user_date_idx on backup_metrics(user_id, metric_date desc);
 create index if not exists backup_metrics_date_idx on backup_metrics(metric_date desc);
 
+-- 5. audit_validation_logs: Evaluator validation test results
+create table if not exists public.audit_validation_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  backup_id uuid references public.backups(id) on delete set null,
+
+  -- Validation type
+  validation_type text not null
+    check (validation_type in ('api_response_time', 'restore_test', 'storage_connectivity')),
+
+  -- Endpoint or test target
+  endpoint text,
+
+  -- Test metrics and results
+  metrics jsonb not null default '{}',
+  status text not null
+    check (status in ('passed', 'warning', 'failed')),
+  test_date timestamptz default now(),
+  test_details jsonb,
+  issues jsonb default '[]'::jsonb,
+
+  -- Audit
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index if not exists audit_validation_logs_user_id_idx on audit_validation_logs(user_id);
+create index if not exists audit_validation_logs_user_test_date_idx on audit_validation_logs(user_id, test_date desc);
+create index if not exists audit_validation_logs_validation_type_idx on audit_validation_logs(validation_type);
+create index if not exists audit_validation_logs_status_idx on audit_validation_logs(status);
+
 -- ============================================================
 -- PHASE 2: COLUMN ADDITIONS TO EXISTING TABLES
 -- ============================================================
@@ -192,6 +223,17 @@ drop policy if exists "users_can_view_own_metrics" on backup_metrics;
 create policy "users_can_view_own_metrics" on backup_metrics
   for select using (auth.uid() = user_id);
 
+-- 5. audit_validation_logs RLS
+alter table public.audit_validation_logs enable row level security;
+
+drop policy if exists "users_can_view_own_audit_logs" on audit_validation_logs;
+create policy "users_can_view_own_audit_logs" on audit_validation_logs
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "evaluators_can_insert_audit_logs" on audit_validation_logs;
+create policy "evaluators_can_insert_audit_logs" on audit_validation_logs
+  for insert with check (auth.uid() = user_id);
+
 -- ============================================================
 -- PHASE 2: TRIGGERS FOR AUTOMATED MAINTENANCE
 -- ============================================================
@@ -240,6 +282,21 @@ create trigger backup_metrics_timestamp
   before update on backup_metrics
   for each row
   execute function update_backup_metrics_timestamp();
+
+-- Trigger: Auto-update audit_validation_logs.updated_at
+create or replace function update_audit_validation_logs_timestamp()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists audit_validation_logs_timestamp on audit_validation_logs;
+create trigger audit_validation_logs_timestamp
+  before update on audit_validation_logs
+  for each row
+  execute function update_audit_validation_logs_timestamp();
 
 -- ============================================================
 -- PHASE 2: HELPER VIEWS & FUNCTIONS

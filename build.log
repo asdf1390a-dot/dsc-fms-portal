@@ -1,0 +1,195 @@
+
+> dsc-fms-portal@1.0.0 build
+> next build
+
+   ▲ Next.js 14.0.0
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/61) ...
+ ⚠ Entire page /assets/new deopted into client-side rendering. https://nextjs.org/docs/messages/deopted-into-client-rendering /assets/new
+   Generating static pages (15/61) 
+   Generating static pages (30/61) 
+   Generating static pages (45/61) 
+ ✓ Generating static pages (61/61) 
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                     Size     First Load JS
+┌ ○ /                                           924 B          88.9 kB
+├ ○ /_not-found                                 882 B          88.8 kB
+├ λ /api/admin/migrate                          0 B                0 B
+├ λ /api/assets                                 0 B                0 B
+├ λ /api/assets/[assetId]/dispose               0 B                0 B
+├ λ /api/assets/[assetId]/documents             0 B                0 B
+├ λ /api/assets/[assetId]/documents/[doc_id]    0 B                0 B
+├ λ /api/assets/export/csv                      0 B                0 B
+├ λ /api/assets/export/excel                    0 B                0 B
+├ λ /api/backups/cleanup/manual                 0 B                0 B
+├ λ /api/backups/metrics/daily                  0 B                0 B
+├ λ /api/backups/metrics/summary                0 B                0 B
+├ λ /api/backups/notifications/[id]/read        0 B                0 B
+├ λ /api/backups/notifications/list             0 B                0 B
+├ λ /api/backups/quota/status                   0 B                0 B
+├ λ /api/backups/quota/update                   0 B                0 B
+├ λ /api/backups/schedule/config                0 B                0 B
+├ λ /api/cron/backups/cleanup/daily             0 B                0 B
+├ λ /api/cron/backups/metrics/daily             0 B                0 B
+├ λ /api/cron/backups/schedule/daily            0 B                0 B
+├ λ /api/cron/notifications                     0 B                0 B
+├ λ /api/cron/weekly-reports/generate           0 B                0 B
+├ λ /api/weekly-reports                         0 B                0 B
+├ λ /api/weekly-reports/[id]/approve            0 B                0 B
+├ λ /api/weekly-reports/[id]/comments           0 B                0 B
+├ λ /api/weekly-reports/[id]/export             0 B                0 B
+├ λ /api/weekly-reports/[id]/review             0 B                0 B
+├ λ /api/weekly-reports/auto-generate           0 B                0 B
+├ λ /api/weekly-reports/entries                 0 B                0 B
+├ λ /api/weekly-reports/generate                0 B                0 B
+├ λ /api/weekly-reports/history                 0 B                0 B
+├ λ /api/weekly-reports/submit                  0 B                0 B
+├ λ /api/weekly-reports/templates               0 B                0 B
+├ ○ /assets                                     4.59 kB        92.5 kB
+├ λ /assets/[assetId]                           3.49 kB        91.5 kB
+├ ○ /assets/new                                 5.58 kB        93.5 kB
+├ ○ /reports/weekly                             3.08 kB          91 kB
+└ λ /reports/weekly/[id]                        3.58 kB        91.5 kB
++ First Load JS shared by all                   88 kB
+  ├ chunks/2472-19fbf4cd0bb20ac4.js             32.5 kB
+  ├ chunks/fd9d1056-59138f79930ee6e5.js         53.3 kB
+  ├ chunks/main-app-bf60af52a43a81ba.js         237 B
+  └ chunks/webpack-692c468ab579fbb6.js          1.9 kB
+
+Route (pages)                                   Size     First Load JS
+┌ λ /api/assets/[assetId]/history               0 B            83.4 kB
+├ λ /api/assets/history                         0 B            83.4 kB
+├ λ /api/assets/report/[id]                     0 B            83.4 kB
+├ λ /api/assets/stats                           0 B            83.4 kB
+├ λ /api/auth/find-email                        0 B            83.4 kB
+├ λ /api/backup/[id]                            0 B            83.4 kB
+├ λ /api/backup/cleanup/daily                   0 B            83.4 kB
+├ λ /api/backup/cleanup/manual                  0 B            83.4 kB
+├ λ /api/backup/create                          0 B            83.4 kB
+├ λ /api/backup/files                           0 B            83.4 kB
+├ λ /api/backup/list                            0 B            83.4 kB
+├ λ /api/backup/metrics/daily                   0 B            83.4 kB
+├ λ /api/backup/metrics/summary                 0 B            83.4 kB
+├ λ /api/backup/metrics/update-usage            0 B            83.4 kB
+├ λ /api/backup/notifications/[id]/read         0 B            83.4 kB
+├ λ /api/backup/notifications/list              0 B            83.4 kB
+├ λ /api/backup/quota/status                    0 B            83.4 kB
+├ λ /api/backup/quota/update                    0 B            83.4 kB
+├ λ /api/backup/schedule/configure              0 B            83.4 kB
+├ λ /api/backup/schedule/daily                  0 B            83.4 kB
+├ λ /api/backup/schedule/trigger                0 B            83.4 kB
+├ λ /api/backup/update                          0 B            83.4 kB
+├ λ /api/bm/analysis                            0 B            83.4 kB
+├ λ /api/bm/import                              0 B            83.4 kB
+├ λ /api/bm/record                              0 B            83.4 kB
+├ λ /api/bm/records                             0 B            83.4 kB
+├ λ /api/bm/resolve                             0 B            83.4 kB
+├ λ /api/career/achievements                    0 B            83.4 kB
+├ λ /api/career/achievements/[id]               0 B            83.4 kB
+├ λ /api/career/companies                       0 B            83.4 kB
+├ λ /api/career/companies/[id]                  0 B            83.4 kB
+├ λ /api/career/profile                         0 B            83.4 kB
+├ λ /api/career/profile/check-slug              0 B            83.4 kB
+├ λ /api/career/projects                        0 B            83.4 kB
+├ λ /api/career/projects/[id]                   0 B            83.4 kB
+├ λ /api/discord-notify                         0 B            83.4 kB
+├ λ /api/disposals/[id]/download                0 B            83.4 kB
+├ λ /api/disposals/report/[id]                  0 B            83.4 kB
+├ λ /api/inventory/export                       0 B            83.4 kB
+├ λ /api/inventory/low-stock-alert              0 B            83.4 kB
+├ λ /api/kpi/actuals                            0 B            83.4 kB
+├ λ /api/kpi/actuals/[id]                       0 B            83.4 kB
+├ λ /api/kpi/comments                           0 B            83.4 kB
+├ λ /api/kpi/comments/[id]                      0 B            83.4 kB
+├ λ /api/kpi/dashboard                          0 B            83.4 kB
+├ λ /api/kpi/sync                               0 B            83.4 kB
+├ λ /api/kpi/targets                            0 B            83.4 kB
+├ λ /api/kpi/targets/[id]                       0 B            83.4 kB
+├ λ /api/kpi/trend                              0 B            83.4 kB
+├ λ /api/photos/delete                          0 B            83.4 kB
+├ λ /api/photos/upload                          0 B            83.4 kB
+├ λ /api/pm/compliance                          0 B            83.4 kB
+├ λ /api/pm/generate                            0 B            83.4 kB
+├ λ /api/pm/work-logs                           0 B            83.4 kB
+├ λ /api/reports                                0 B            83.4 kB
+├ λ /api/reports/[year]/[month]                 0 B            83.4 kB
+├ λ /api/reports/[year]/[month]/extract         0 B            83.4 kB
+├ λ /api/reports/[year]/[month]/generate/excel  0 B            83.4 kB
+├ λ /api/reports/[year]/[month]/generate/ppt    0 B            83.4 kB
+├ λ /api/reports/quality/chunk-upload           0 B            83.4 kB
+├ λ /api/reports/quality/download               0 B            83.4 kB
+├ λ /api/reports/quality/generate               0 B            83.4 kB
+├ λ /api/reports/quality/history                0 B            83.4 kB
+├ λ /api/travel/records                         0 B            83.4 kB
+├ λ /api/travel/records/[id]                    0 B            83.4 kB
+├ λ /api/vendors                                0 B            83.4 kB
+├ λ /api/vendors/[id]                           0 B            83.4 kB
+├ ○ /assets/edit/[id]                           3.64 kB         151 kB
+├ ○ /bm                                         6.32 kB         154 kB
+├ ○ /bm/[id]                                    6.6 kB          154 kB
+├ ○ /bm/edit/[id]                               5.86 kB         153 kB
+├ ○ /bm/import                                  4 kB            152 kB
+├ ○ /bm/new                                     10.8 kB         158 kB
+├ ○ /bm/stats                                   4.56 kB         152 kB
+├ ○ /career                                     2.85 kB         156 kB
+├ ○ /career/[companyId]                         5.16 kB         158 kB
+├ ○ /career/[companyId]/projects/[projectId]    1.2 kB          154 kB
+├ ○ /career/[companyId]/projects/new            831 B           154 kB
+├ ○ /career/setup                               5.49 kB         153 kB
+├ ○ /disposals                                  5.53 kB         153 kB
+├ ○ /disposals/[id]                             7.66 kB         155 kB
+├ ○ /disposals/new                              6.5 kB          154 kB
+├ ○ /inventory                                  5.12 kB         153 kB
+├ ○ /inventory/[id]                             6.89 kB         154 kB
+├ ○ /inventory/dashboard                        5.22 kB         153 kB
+├ ○ /inventory/edit/[id]                        5.03 kB         153 kB
+├ ○ /inventory/new                              5.09 kB         153 kB
+├ ○ /jeepney-personal                           2.73 kB        88.6 kB
+├ ○ /jeepney-personal/backup-app                7.37 kB         155 kB
+├ ○ /jeepney-personal/backup-app/metrics        1.3 kB          272 kB
+├ ○ /jeepney-personal/backup-app/notifications  1.56 kB         272 kB
+├ ○ /jeepney-personal/backup-app/settings       1.76 kB         272 kB
+├ ○ /jeepney-personal/backup-app/storage        1.52 kB         272 kB
+├ ○ /jeepney-personal/component-demo            5.47 kB        88.9 kB
+├ ○ /jeepney-personal/dsc-hub                   2.65 kB        88.6 kB
+├ ○ /jeepney-personal/dsc-hub/fms               2.75 kB        88.7 kB
+├ ○ /jeepney-personal/dsc-hub/travel            2.49 kB        88.4 kB
+├ ○ /kpi                                        5.23 kB         153 kB
+├ ○ /kpi/input                                  5.07 kB         153 kB
+├ ○ /kpi/trend                                  5.86 kB         153 kB
+├ ○ /kpi/weekly                                 4.36 kB         152 kB
+├ ○ /login                                      2.35 kB         150 kB
+├ ○ /pm                                         5.4 kB          153 kB
+├ ○ /pm/[id]                                    7.33 kB         155 kB
+├ ○ /pm/log/[scheduleId]                        3.93 kB         152 kB
+├ ○ /pm/new                                     5.28 kB         153 kB
+├ ○ /pm/plans                                   4.05 kB         152 kB
+├ ○ /pm/plans/[planId]                          6.66 kB         154 kB
+├ ○ /pm/report                                  5.15 kB         153 kB
+├ ○ /reports                                    4.28 kB         152 kB
+├ ○ /reports/[year]/[month]                     5.98 kB         154 kB
+├ ○ /reports/production                         5.02 kB         153 kB
+├ ○ /reports/quality                            6.4 kB          154 kB
+├ ○ /status                                     5.2 kB         91.1 kB
+├ ○ /vendors                                    3.73 kB         151 kB
+├ ○ /vendors/[id]                               2.83 kB         154 kB
+├ ○ /vendors/new                                1.42 kB         152 kB
+├ ○ /wo                                         4.77 kB         152 kB
+├ ○ /wo/[id]                                    6.11 kB         154 kB
+└ ○ /wo/new                                     4.79 kB         152 kB
++ First Load JS shared by all                   83.4 kB
+  ├ chunks/framework-aa514d2b6041ebee.js        45.7 kB
+  ├ chunks/main-d1536c69c9e0b940.js             35.7 kB
+  ├ chunks/pages/_app-0a6f9986ee298e67.js       209 B
+  └ chunks/webpack-692c468ab579fbb6.js          1.9 kB
+
+○  (Static)   prerendered as static HTML
+λ  (Dynamic)  server-rendered on demand using Node.js
+

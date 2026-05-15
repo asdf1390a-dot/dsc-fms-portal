@@ -776,7 +776,273 @@ FROM backup_policies;
 
 ---
 
-## 5. 모니터링 & 알림 (Monitoring & Notifications)
+## 5. 모니터링 & 알림 + 감사 지표 (Monitoring, Notifications & Audit Integration)
+
+### 5.0 감사체계 연계 (Audit System Integration) ⭐ **AI팀원 활용**
+
+백업 메트릭을 DSC 공장의 감사 프레임워크에 통합. 매일 자동으로 비서가 수집 → 평가자가 검증 → 데이터분석가가 분석.
+
+#### 배포 가용성 지표 (Deployment Availability)
+```
+지표 이름: backup_success_rate
+수식: (성공한 백업 수 / 시도한 백업 수) × 100
+목표값: ≥ 95%
+담당: 비서(자동 수집) + 평가자(검증)
+
+예시:
+- 2026-05-13: 28/28 = 100% ✅ (배포 정상)
+- 2026-05-12: 27/28 = 96% ✅ (1회 실패, 복구됨)
+- 2026-05-11: 25/28 = 89% ⚠️ (3회 연속 실패 — 평가자 검증 필요)
+
+평가자 검증 항목:
+- API 응답 시간 (< 2초 통과)
+- 저장소 연결 상태
+- 데이터 무결성
+```
+
+#### 시스템 신뢰도 데이터 (System Reliability)
+```
+지표 이름: backup_storage_reliability
+수식: (보관 정책 준수율 × 가용성 점수) / 2
+목표값: ≥ 98%
+
+구성:
+├─ 보관 정책 준수율 (retention_compliance)
+│  수식: (예정된 삭제 / 실제 삭제) × 100
+│  예: 90일 경과 백업 중 100% 자동 삭제 = 100%
+│
+└─ 가용성 점수 (availability_score)
+   수식: (24시간 중 정상 동작 시간 / 24시간) × 100
+   예: 23.5시간 정상 = 97.9%
+
+매일 집계되는 신뢰도 점수:
+- 98% 이상: 녹색 (신뢰도 높음)
+- 95~98%: 황색 (주의 필요)
+- 95% 미만: 빨간색 (개선 필요 — 평가자 즉시 검증)
+```
+
+#### 비서 자동화 작업 (Secretary Auto Tasks)
+```javascript
+// lib/audit/collectBackupMetrics.js
+
+매일 자동 실행 (03:30 KST):
+1. backup_metrics 조회 → summary 계산
+2. backup_notifications 조회 → 실패율 계산
+3. backup_policies 조회 → 준수율 계산
+4. backup_notifications에 audit_metrics 추가
+
+출력:
+{
+  date: '2026-05-13',
+  success_rate: 96.0,
+  retention_compliance: 100.0,
+  availability_score: 99.2,
+  reliability_score: 99.6,
+  status: 'healthy',  // healthy | warning | critical
+  evaluator_required: false
+}
+
+→ 평가자가 매일 아침 review
+```
+
+#### 평가자 검증 체크리스트 (Evaluator Validation)
+```
+Daily Standup (매일 아침):
+□ 어제 백업 성공률 확인 (< 95% 시 원인 분석)
+□ API 응답 시간 확인 (SLA: < 2초)
+□ 저장소 연결 상태 테스트 (manual validation)
+□ 데이터 무결성 샘플 확인 (매주 1회 복구 테스트)
+
+Weekly Review (매주 금요일):
+□ 주간 reliability_score 추이 (7일 평균)
+□ 실패 백업 근본 원인 분석
+□ 복구 테스트 통과율 (target: 100%)
+□ 저장소 품질 지표 (압축률, 중복제거율)
+
+Monthly Audit (매월 말):
+□ 월간 SLA 준수율 (target: 99.6%)
+□ 비용 최적화 검토 (저장소 사용량)
+□ 성능 추이 분석
+□ 개선안 수립
+```
+
+#### 데이터분석가 분석 작업 (Data Analyst Tasks)
+```javascript
+// lib/audit/analyzeBackupTrends.js
+
+매일 자동 실행 (04:00 KST):
+분석 목표:
+1. 일일 백업 크기 추이 (Daily Backup Size Trends)
+2. 저장소 할당량 변화 (Storage Quota Changes)
+3. 압축 효율 분석 (Compression Efficiency)
+4. 사용 패턴 분석 (Usage Patterns)
+
+**1. 백업 크기 추이 분석:**
+
+쿼리:
+SELECT
+  DATE(created_at) as backup_date,
+  COUNT(*) as daily_count,
+  SUM(size_bytes) / (1024^3) as total_gb,
+  AVG(size_bytes) / (1024^3) as avg_backup_gb,
+  MAX(size_bytes) / (1024^3) as max_backup_gb,
+  MIN(size_bytes) / (1024^3) as min_backup_gb
+FROM backups
+WHERE user_id = '${userId}'
+  AND status = 'completed'
+  AND created_at >= NOW() - INTERVAL '90 days'
+GROUP BY DATE(created_at)
+ORDER BY backup_date DESC;
+
+메트릭 저장 (backup_metrics):
+{
+  user_id: '${userId}',
+  metric_date: '2026-05-15',
+  daily_backup_count: 28,
+  total_size_gb: 45.3,
+  avg_backup_size_gb: 1.62,
+  max_backup_size_gb: 3.2,
+  min_backup_size_gb: 0.8,
+  size_growth_percent: 2.3,  // 전일 대비 증감율
+  trend: 'stable' | 'increasing' | 'decreasing'
+}
+```
+
+**2. 저장소 할당량 변화 분석:**
+
+쿼리:
+SELECT
+  DATE(last_calculated_at) as calc_date,
+  current_usage_bytes / (1024^3) as current_gb,
+  max_storage_bytes / (1024^3) as max_gb,
+  (current_usage_bytes / max_storage_bytes) * 100 as usage_percent,
+  (current_usage_bytes / max_storage_bytes) * 100 - LAG((current_usage_bytes / max_storage_bytes) * 100) 
+    OVER (ORDER BY last_calculated_at) as daily_change_percent
+FROM backup_storage_quotas
+WHERE user_id = '${userId}'
+ORDER BY last_calculated_at DESC
+LIMIT 90;
+
+데이터분석가 리포트:
+{
+  date: '2026-05-15',
+  current_usage: { gb: 18.5, percent: 46.3 },
+  quota_trend: {
+    7day_avg_growth: 0.26,  // % per day
+    projected_full_date: '2026-10-22',  // 현재 속도면 풀 찰 예상일
+    recommendation: 'stable' | 'upgrade_recommended' | 'urgent'
+  },
+  daily_changes: [
+    { date: '2026-05-15', usage_gb: 18.5, change_percent: 0.3 },
+    { date: '2026-05-14', usage_gb: 18.4, change_percent: 0.4 },
+    // ...
+  ]
+}
+
+→ 주간 리포트에 "할당량 초과 예상일" 자동 포함
+→ 월간 "저장소 계획 검토" 보고서 작성
+```
+
+**3. 압축 효율 분석 (Compression Analysis):**
+
+```javascript
+// 백업 파일 메타데이터에 압축 정보 추가
+{
+  original_size_bytes: 2147483648,    // 2 GB
+  compressed_size_bytes: 536870912,   // 512 MB
+  compression_ratio: 0.25,            // 25% 압축율
+  compression_algorithm: 'gzip',      // gzip 기본
+  compression_time_seconds: 45,
+  decompression_time_seconds: 38
+}
+
+분석:
+- 평균 압축율: (일반적으로 50~70%)
+- 최대 압축율: 파일 유형별 분석
+- 압축 성능: 백업당 소요시간 추이
+- 권장사항: 압축 레벨 조정 필요 여부
+```
+
+**4. 주간/월간 보고서 (Weekly & Monthly Reports):**
+
+주간 분석 리포트 (매주 금요일):
+```
+📊 백업 주간 분석 리포트 (2026-05-08 ~ 2026-05-14)
+
+1️⃣ 크기 추이
+   - 주간 평균: 44.8 GB
+   - 일일 평균 변화: +0.26 GB/일
+   - 추이: 안정적 상승 ⬆️
+
+2️⃣ 저장소 상태
+   - 현재 사용: 18.5 GB / 40 GB (46.3%)
+   - 일주일 전: 17.9 GB (44.8%)
+   - 예상 풀 채우는 날: 2026-10-22 (157일)
+   - 상태: 🟡 경고 (50% 도달 예상 2026-08-15)
+
+3️⃣ 압축 효율
+   - 평균 압축율: 58.2%
+   - 최고 효율 백업: backup_20260514_1 (72%)
+   - 최저 효율 백업: backup_20260510_2 (42%)
+
+4️⃣ 패턴 분석
+   - 가장 많은 백업: 목요일 (28회)
+   - 평균 백업 크기: 1.62 GB
+   - 피크 시간: 02:00 KST (자동 백업)
+
+5️⃣ 권장사항
+   - 저장소 할당량 증가 검토 (6개월 내)
+   - 압축 설정 최적화 검토
+   - 오래된 백업(30일+) 자동 삭제 정책 검토
+```
+
+월간 종합 분석 (매월 말):
+```
+📈 백업 월간 종합 분석 리포트 (2026-05-01 ~ 2026-05-31)
+
+1️⃣ 월간 성과
+   - 총 백업 수: 810회 (일평균 27회)
+   - 성공률: 96.3%
+   - 총 용량: 526 GB (평균 17.5 GB/일)
+
+2️⃣ 신뢰도 분석
+   - 가용성 점수: 99.2% ✅
+   - 압축 신뢰도: 99.8% ✅
+   - 저장소 접근성: 99.9% ✅
+   - 종합 신뢰도: 99.6% ⭐
+
+3️⃣ 비용 최적화
+   - Supabase Storage 비용: $X/월
+   - 압축으로 절약: $Y/월 (25%)
+   - 예상 연간 비용: $Z (현 추이 기반)
+
+4️⃣ 개선안 제시
+   - 현재 패턴: 안정적 상승 추이
+   - 리스크: 저장소 고갈 위험 (6개월)
+   - 대책: 할당량 증가 또는 오래 백업 자동 삭제 정책
+   - ROI: 월 $Y 절약 예상
+
+5️⃣ 차월 계획
+   - 저장소 증설 검토 (2026-06-15까지 결정)
+   - 압축 알고리즘 성능 벤치마크
+   - 사용자 피드백 수집
+```
+
+API 엔드포인트 (데이터분석가용):
+```javascript
+// GET /api/backup/analytics/trends?user_id=${userId}&days=90
+응답: { daily_data, weekly_summary, monthly_summary, forecasts }
+
+// GET /api/backup/analytics/storage-quota?user_id=${userId}
+응답: { current_usage, quota_history, projections, recommendations }
+
+// GET /api/backup/analytics/compression?user_id=${userId}&days=30
+응답: { compression_ratio, efficiency_metrics, algorithm_analysis }
+
+// GET /api/backup/analytics/patterns?user_id=${userId}&days=30
+응답: { hourly_distribution, daily_distribution, usage_patterns, recommendations }
+```
+```
 
 ### 5.1 백업 성공/실패 알림
 

@@ -15,19 +15,23 @@
   },
   "crons": [
     {
-      "path": "/api/cron/backups/schedule/daily",
+      "path": "/api/backup/schedule/daily",
       "schedule": "0 2 * * *"
     },
     {
-      "path": "/api/cron/backups/metrics/daily",
+      "path": "/api/backup/metrics/update-usage",
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/cron/backups/cleanup/daily",
+      "path": "/api/backup/cleanup/daily",
       "schedule": "0 4 * * *"
     },
     {
-      "path": "/api/cron/weekly-reports/generate",
+      "path": "/api/backup/audit/validate/api-response-time",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/weekly-reports/generate",
       "schedule": "30 14 * * 0"
     }
   ]
