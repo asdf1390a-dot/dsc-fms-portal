@@ -24,7 +24,7 @@ GET /api/assets/locations        — 위치 자동완성
 POST /api/assets                 — 단건 생성
 PUT /api/assets/:id              — 단건 수정
 DELETE /api/assets/:id           — 단건 삭제
-POST /api/assets/bulk-update     — 다중 수정
+POST /api/assets/bulk-update     — 일괄 수정
 ```
 
 ### Group 3: 대량 임포트 (Import) — 5개
@@ -269,7 +269,7 @@ sort_order=asc|desc       (기본값: desc)
 
 ---
 
-### 9. POST /api/assets/bulk-update (다중 수정) [신규 구현]
+### 9. POST /api/assets/bulk-update (일괄 수정) [신규 구현]
 
 **요청 본문:**
 ```json

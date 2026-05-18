@@ -73,3 +73,51 @@ export interface ApiResponse<T> {
   details?: string;
   message?: string;
 }
+
+export interface AssetQRScan {
+  id: string;
+  asset_id: string;
+  qr_payload: string;
+  scanned_at: string;
+  scanned_by?: string;
+  device_info?: string;
+  location_gps?: string;
+}
+
+export interface ImportBatch {
+  batch_id: string;
+  file_name: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  total_rows: number;
+  inserted: number;
+  updated: number;
+  failed: number;
+  created_at: string;
+  created_by?: string;
+}
+
+export interface ImportValidationResult {
+  file_name: string;
+  total_rows: number;
+  valid_rows: number;
+  errors: Array<{
+    row: number;
+    field: string;
+    value?: any;
+    message: string;
+  }>;
+  preview: Partial<Asset>[];
+  validation_summary: {
+    ready_to_import: number;
+    has_errors: number;
+    duplicate_tags: number;
+    invalid_class_codes: number;
+  };
+}
+
+export interface AssetStats {
+  total_assets: number;
+  by_status: Record<string, number>;
+  by_category: Record<string, number>;
+  last_updated: string;
+}

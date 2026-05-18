@@ -73,7 +73,7 @@
 6.  POST /api/assets                   — 생성 [기존 코드 재사용 app/api/assets/route.ts]
 7.  PUT /api/assets/:id                — 수정 [신규]
 8.  DELETE /api/assets/:id             — 삭제 [신규]
-9.  POST /api/assets/bulk-update       — 다중 수정 [신규]
+9.  POST /api/assets/bulk-update       — 일괄 수정 [신규]
 ```
 
 **Group 3: Import (5개)**

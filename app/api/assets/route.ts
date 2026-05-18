@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { CreateAssetRequest, CreateAssetResponse } from '@/lib/assets/types';
+import { CreateAssetRequest, CreateAssetResponse, Asset, ApiResponse } from '@/lib/assets/types';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +10,84 @@ const supabase = createClient(
     },
   }
 );
+
+export async function GET(request: Request): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const per_page = Math.min(parseInt(url.searchParams.get('per_page') || '20'), 100);
+    const q = url.searchParams.get('q');
+    const category = url.searchParams.get('category');
+    const status = url.searchParams.get('status');
+    const location = url.searchParams.get('location');
+    const make = url.searchParams.get('make');
+    const sort_by = url.searchParams.get('sort_by') || 'updated_at';
+    const sort_order = url.searchParams.get('sort_order') || 'desc';
+
+    const offset = (page - 1) * per_page;
+
+    let query = supabase
+      .from('assets')
+      .select('*', { count: 'exact' });
+
+    // 필터 적용
+    if (category) {
+      query = query.eq('asset_class_code', category);
+    }
+    if (status) {
+      query = query.eq('status', status);
+    }
+    if (location) {
+      query = query.ilike('location', `%${location}%`);
+    }
+    if (make) {
+      query = query.eq('make', make);
+    }
+    // 검색: name_en / name_ta / model / serial_no / machine_asset_number
+    if (q && q.trim().length > 0) {
+      const term = q.trim().replace(/%/g, '');
+      query = query.or(
+        `name_en.ilike.%${term}%,name_ta.ilike.%${term}%,model.ilike.%${term}%,serial_no.ilike.%${term}%,machine_asset_number.ilike.%${term}%`
+      );
+    }
+
+    // 정렬 적용
+    const orderDirection = sort_order === 'asc' ? false : true;
+    query = query.order(sort_by, { ascending: !orderDirection });
+
+    // 페이지네이션
+    query = query.range(offset, offset + per_page - 1);
+
+    const { data: assets, count, error } = await query;
+
+    if (error) {
+      return Response.json(
+        { success: false, error: { message: error.message } },
+        { status: 500 }
+      );
+    }
+
+    const total_pages = count ? Math.ceil(count / per_page) : 0;
+
+    return Response.json({
+      success: true,
+      data: assets || [],
+      total: count || 0,
+      page,
+      per_page,
+      total_pages,
+    });
+  } catch (error) {
+    console.error('API error:', error);
+    return Response.json(
+      {
+        success: false,
+        error: { message: error instanceof Error ? error.message : 'Server error' },
+      },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: Request): Promise<Response> {
   try {
