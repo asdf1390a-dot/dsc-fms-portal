@@ -1,0 +1,92 @@
+#!/bin/bash
+
+# commit-msg Git Hook
+# Validates commit messages against GCS (Git Commit Sync) standard format
+# Enforces: <type>(<scope>): <subject> + Refs: <task_id> + Stage: <stage> in body
+
+set -euo pipefail
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="${2:-}"
+
+# Skip validation for merge/rebase commits
+if [[ "$COMMIT_SOURCE" == "merge" ]] || [[ "$COMMIT_SOURCE" == "squash" ]]; then
+    exit 0
+fi
+
+# Read commit message
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Colors for output
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+# Validation flags
+HAS_VALID_HEADER=false
+HAS_REFS=false
+HAS_STAGE=false
+VIOLATIONS=0
+
+# Line 1: Check header format (type(scope): subject)
+FIRST_LINE=$(echo "$COMMIT_MSG" | head -n1)
+
+if [[ $FIRST_LINE =~ ^(feat|fix|chore|docs|style|refactor|perf|test|ci|revert)\(([a-z0-9\-_]+)\):[[:space:]].+$ ]]; then
+    HAS_VALID_HEADER=true
+else
+    ((VIOLATIONS++))
+fi
+
+# Body: Check for Refs: tag
+if echo "$COMMIT_MSG" | grep -q "^Refs:[[:space:]]*[a-zA-Z0-9_\-\.]+"; then
+    HAS_REFS=true
+else
+    ((VIOLATIONS++))
+fi
+
+# Body: Check for Stage: tag with valid values
+if echo "$COMMIT_MSG" | grep -qE "^Stage:[[:space:]]*(DESIGN|DB|API|UI|DEPLOY|VERIFY)"; then
+    HAS_STAGE=true
+else
+    ((VIOLATIONS++))
+fi
+
+# Report violations
+if [[ $VIOLATIONS -gt 0 ]]; then
+    echo -e "${RED}❌ COMMIT MESSAGE VALIDATION FAILED${NC}"
+    echo ""
+
+    if [[ $HAS_VALID_HEADER == false ]]; then
+        echo -e "${YELLOW}❌ Header format invalid${NC}"
+        echo "  Expected: <type>(<scope>): <subject>"
+        echo "  Valid types: feat, fix, chore, docs, style, refactor, perf, test, ci, revert"
+        echo "  Example: feat(asset): add QR code generation"
+        echo ""
+    fi
+
+    if [[ $HAS_REFS == false ]]; then
+        echo -e "${YELLOW}❌ Missing 'Refs:' tag in commit body${NC}"
+        echo "  Add: Refs: <task_id>"
+        echo "  Example: Refs: asset-master-phase2"
+        echo ""
+    fi
+
+    if [[ $HAS_STAGE == false ]]; then
+        echo -e "${YELLOW}❌ Missing or invalid 'Stage:' tag in commit body${NC}"
+        echo "  Add: Stage: <DESIGN|DB|API|UI|DEPLOY|VERIFY>"
+        echo "  Example: Stage: API"
+        echo ""
+    fi
+
+    echo "GCS (Git Commit Sync) Standard:"
+    echo "  Header: <type>(<scope>): <subject>"
+    echo "  Body must include:"
+    echo "    Refs: <task_id>"
+    echo "    Stage: <stage>"
+    echo ""
+    exit 1
+else
+    echo -e "${GREEN}✅ Commit message valid (GCS compliant)${NC}"
+    exit 0
+fi
