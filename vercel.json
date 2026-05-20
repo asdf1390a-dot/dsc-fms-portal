@@ -15,44 +15,32 @@
   },
   "crons": [
     {
-      "path": "/api/cron/checkpoint/08-00",
+      "path": "/api/cron/checkpoints/08-00",
       "schedule": "0 23 * * *"
     },
     {
-      "path": "/api/cron/checkpoint/09-00",
-      "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/checkpoint/12-00",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/checkpoint/14-00",
+      "path": "/api/cron/checkpoints/14-00",
       "schedule": "0 5 * * *"
     },
     {
-      "path": "/api/cron/checkpoint/15-00",
+      "path": "/api/cron/checkpoints/15-00",
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/cron/checkpoint/18-00",
+      "path": "/api/cron/checkpoints/18-00",
       "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/backup/schedule/daily",
+      "path": "/api/cron/backups/schedule/daily",
       "schedule": "0 2 * * *"
     },
     {
-      "path": "/api/backup/metrics/update-usage",
+      "path": "/api/cron/backups/metrics/daily",
       "schedule": "0 4 * * *"
     },
     {
-      "path": "/api/backup/cleanup/daily",
+      "path": "/api/cron/backups/cleanup/daily",
       "schedule": "30 10 * * *"
-    },
-    {
-      "path": "/api/backup/audit/validate/api-response-time",
-      "schedule": "0 11 * * *"
     },
     {
       "path": "/api/weekly-reports/generate",
