@@ -90,7 +90,7 @@ class CronCheckpointManager {
         return 0;
       }
 
-      const logs = data || [];
+      const logs: CheckpointEvent[] = data || [];
       const completed = logs.filter(log => log.status === 'completed').length;
       const reliability = logs.length > 0 ? (completed / logs.length) * 100 : 0;
 
@@ -118,7 +118,7 @@ class CronCheckpointManager {
           status: event.status,
           delay_minutes: event.delayMinutes || 0,
           timestamp: event.timestamp,
-        },
+        } as any,
       ]);
 
       if (error) {
