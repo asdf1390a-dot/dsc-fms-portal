@@ -75,8 +75,13 @@ export default function NotificationSettingsPage() {
   }, [user, authLoading, refresh, router]);
 
   const handleChannelsChange = (next) => {
+    if (!Array.isArray(next) || next.length === 0) {
+      setError('최소 1개의 알림 채널이 필요합니다');
+      return;
+    }
     setChannels(next);
     savePrefs(next);
+    setError(null);
   };
 
   const handleMarkRead = async (n) => {

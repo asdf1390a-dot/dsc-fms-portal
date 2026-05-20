@@ -107,11 +107,18 @@ export default function StorageManagement() {
 
           <div>
             <h3 style={S.sectionTitle}>백업 목록</h3>
-            <BackupList
-              backups={backups}
-              onDelete={setConfirmTarget}
-              pendingId={pendingId}
-            />
+            {backups.length === 0 ? (
+              <div style={S.emptyState}>
+                <p style={S.emptyStateText}>저장된 백업이 없습니다.</p>
+                <p style={S.emptyStateHint}>자동 백업 설정에서 백업 일정을 활성화하세요.</p>
+              </div>
+            ) : (
+              <BackupList
+                backups={backups}
+                onDelete={setConfirmTarget}
+                pendingId={pendingId}
+              />
+            )}
           </div>
         </div>
       )}
@@ -167,5 +174,23 @@ const S = {
     textAlign: 'center',
     padding: spacing['3xl'],
     color: colors.textSecondary,
+  },
+  emptyState: {
+    padding: spacing.xl,
+    background: colors.backgroundSecondary,
+    borderRadius: borderRadius.md,
+    textAlign: 'center',
+    border: `1px solid ${colors.borderLight}`,
+  },
+  emptyStateText: {
+    margin: 0,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
+  },
+  emptyStateHint: {
+    margin: `${spacing.sm} 0 0`,
+    fontSize: typography.sizes.sm,
+    color: colors.textTertiary,
   },
 };

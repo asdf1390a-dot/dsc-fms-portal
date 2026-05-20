@@ -36,8 +36,8 @@ export function validatePolicyInput(body) {
     errors.push('auto_delete_enabled must be boolean');
   }
   if (out.backup_time !== undefined) {
-    if (typeof out.backup_time !== 'string' || !/^\d{2}:\d{2}(:\d{2})?$/.test(out.backup_time)) {
-      errors.push('backup_time must match HH:MM or HH:MM:SS');
+    if (typeof out.backup_time !== 'string' || !/^([0-1][0-9]|2[0-3]):([0-5][0-9])(:([0-5][0-9]))?$/.test(out.backup_time)) {
+      errors.push('backup_time must match HH:MM or HH:MM:SS (00:00-23:59)');
     }
   }
   if (out.backup_interval !== undefined && !INTERVALS.has(out.backup_interval)) {

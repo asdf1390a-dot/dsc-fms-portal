@@ -69,6 +69,11 @@ export default function BackupMetricsPage() {
 
       {loading ? (
         <div style={S.center}>로딩 중…</div>
+      ) : !summary && daily.length === 0 ? (
+        <div style={S.emptyState}>
+          <p style={S.emptyStateText}>아직 백업 메트릭 데이터가 없습니다.</p>
+          <p style={S.emptyStateHint}>백업이 실행되면 통계가 나타납니다.</p>
+        </div>
       ) : (
         <div style={S.stack}>
           {summary && <MetricsSummary metrics={summary} />}
@@ -126,5 +131,23 @@ const S = {
     textAlign: 'center',
     padding: spacing['3xl'],
     color: colors.textSecondary,
+  },
+  emptyState: {
+    padding: spacing.xl,
+    background: colors.backgroundSecondary,
+    borderRadius: borderRadius.md,
+    textAlign: 'center',
+    border: `1px solid ${colors.borderLight}`,
+  },
+  emptyStateText: {
+    margin: 0,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.semibold,
+    color: colors.textSecondary,
+  },
+  emptyStateHint: {
+    margin: `${spacing.sm} 0 0`,
+    fontSize: typography.sizes.sm,
+    color: colors.textTertiary,
   },
 };
