@@ -230,7 +230,8 @@ class CronCheckpointManager {
 
       if (error) throw error;
 
-      const completedTimes = new Set((data || []).map(log => log.scheduled_time));
+      const logs: Array<{ scheduled_time: string }> = data || [];
+      const completedTimes = new Set(logs.map(log => log.scheduled_time));
 
       // Check which scheduled times are missing
       for (const scheduledTime of this.config.scheduleTimes) {
