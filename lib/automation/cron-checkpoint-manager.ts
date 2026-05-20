@@ -118,8 +118,8 @@ class CronCheckpointManager {
           status: event.status,
           delay_minutes: event.delayMinutes || 0,
           timestamp: event.timestamp,
-        } as any,
-      ]);
+        },
+      ] as any);
 
       if (error) {
         console.error('Error updating CTB:', error);
