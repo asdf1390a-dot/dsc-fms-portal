@@ -1,0 +1,10 @@
+
+> dsc-fms-portal@1.0.0 dev
+> next dev
+
+   ▲ Next.js 14.0.0
+   - Local:        http://localhost:3000
+   - Environments: .env.local
+
+ ✓ Ready in 1312ms
+[?25h

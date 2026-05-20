@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         cwd: process.cwd(),
         encoding: 'utf-8',
       });
-      recentCommits = gitLog.split('\n').filter(line => line.trim());
+      recentCommits = gitLog.split('\n').filter((line: string) => line.trim()) as string[];
     } catch (e) {
       console.error('Git log error:', e);
     }
