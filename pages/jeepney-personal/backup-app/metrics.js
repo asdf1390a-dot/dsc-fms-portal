@@ -18,6 +18,9 @@ export default function BackupMetricsPage() {
   const [daily, setDaily] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [period, setPeriod] = useState(30);
+
+  const PERIOD_LIMITS = { 7: 7, 30: 30, 90: 90, all: 365 };
 
   useEffect(() => {
     if (authLoading) return;
@@ -28,9 +31,10 @@ export default function BackupMetricsPage() {
     (async () => {
       setLoading(true);
       try {
+        const limit = PERIOD_LIMITS[period] || 30;
         const [s, d] = await Promise.all([
           apiGet('/api/backup/metrics/summary'),
-          apiGet('/api/backup/metrics/daily?limit=30'),
+          apiGet(`/api/backup/metrics/daily?limit=${limit}`),
         ]);
         setSummary(s);
         setDaily(d.metrics || []);
@@ -41,7 +45,7 @@ export default function BackupMetricsPage() {
         setLoading(false);
       }
     })();
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, period]);
 
   return (
     <JeepneyLayout
@@ -56,10 +60,27 @@ export default function BackupMetricsPage() {
       <section style={S.header}>
         <div>
           <h2 style={S.title}>백업 통계</h2>
-          <p style={S.subtitle}>지난 30일 백업 성능 및 추이</p>
+          <p style={S.subtitle}>
+            {period === 'all' ? '전체' : `최근 ${period}일`} 백업 성능 및 추이
+          </p>
         </div>
         <DownloadCSVButton rows={daily} disabled={loading || daily.length === 0} />
       </section>
+
+      <div style={S.periodSelector}>
+        {[7, 30, 90, 'all'].map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            style={{
+              ...S.periodBtn,
+              ...(period === p ? S.periodBtnActive : S.periodBtnInactive),
+            }}
+          >
+            {p === 'all' ? '전체' : `${p}일`}
+          </button>
+        ))}
+      </div>
 
       {error && (
         <div style={S.errBox}>
@@ -109,6 +130,30 @@ const S = {
     margin: `${spacing.sm} 0 0`,
     fontSize: typography.sizes.sm,
     color: colors.textTertiary,
+  },
+  periodSelector: {
+    display: 'flex',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    flexWrap: 'wrap',
+  },
+  periodBtn: {
+    padding: `${spacing.sm} ${spacing.md}`,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.medium,
+    border: `1px solid ${colors.borderLight}`,
+    borderRadius: borderRadius.md,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  periodBtnActive: {
+    background: colors.primary,
+    color: colors.bgPrimary,
+    border: `1px solid ${colors.primary}`,
+  },
+  periodBtnInactive: {
+    background: colors.bgPrimary,
+    color: colors.textPrimary,
   },
   stack: {
     display: 'flex',
