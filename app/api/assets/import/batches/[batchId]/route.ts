@@ -1,4 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
+import { getUserIdFromToken, isTokenExpired } from '@/lib/api-auth';
+import {
+  VALID_ITEM_STATUSES,
+  isValidUuid,
+  normalizePage,
+  normalizePerPage,
+} from '@/lib/assets/import-helpers';
+
+export const dynamic = 'force-dynamic';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -6,26 +15,70 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
+function authenticate(request: Request) {
+  const token = request.headers.get('Authorization')?.replace('Bearer ', '');
+  if (!token) return { userId: null, error: 'Missing token' };
+  if (isTokenExpired(token)) return { userId: null, error: 'Token expired' };
+  const userId = getUserIdFromToken(token);
+  if (!userId) return { userId: null, error: 'Invalid token' };
+  return { userId, error: null };
+}
+
 /**
  * GET /api/assets/import/batches/:batchId
  * Returns batch metadata + items (filterable by status).
+ *
+ * Path params:
+ *   - batchId (uuid)
+ *
  * Query params:
- *   - include_items=1 (default) — include items in response
- *   - item_status=success|error|pending — filter items
- *   - item_page, item_per_page — paginate items
+ *   - include_items=1 (default) — include items in response, 0 to omit
+ *   - item_status=success|error|pending|validating|skipped — filter items
+ *   - item_page (default 1)
+ *   - item_per_page (default 50, max 200)
  */
 export async function GET(
   request: Request,
   { params }: { params: { batchId: string } }
 ): Promise<Response> {
   try {
+    const { userId, error: authErr } = authenticate(request);
+    if (!userId) {
+      return Response.json(
+        { success: false, error: { message: authErr || 'Unauthorized' } },
+        { status: 401 }
+      );
+    }
+
     const { batchId } = params;
+    if (!isValidUuid(batchId)) {
+      return Response.json(
+        { success: false, error: { message: 'Invalid batchId (must be a UUID)' } },
+        { status: 400 }
+      );
+    }
+
     const url = new URL(request.url);
     const includeItems = url.searchParams.get('include_items') !== '0';
     const itemStatus = url.searchParams.get('item_status');
-    const itemPage = parseInt(url.searchParams.get('item_page') || '1');
+
+    if (itemStatus && !VALID_ITEM_STATUSES.includes(itemStatus)) {
+      return Response.json(
+        {
+          success: false,
+          error: {
+            message: `Invalid item_status filter. Allowed: ${VALID_ITEM_STATUSES.join(', ')}`,
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    const itemPageRaw = parseInt(url.searchParams.get('item_page') || '1');
+    const itemPerPageRaw = parseInt(url.searchParams.get('item_per_page') || '50');
+    const itemPage = Number.isFinite(itemPageRaw) && itemPageRaw > 0 ? itemPageRaw : 1;
     const itemPerPage = Math.min(
-      parseInt(url.searchParams.get('item_per_page') || '50'),
+      Math.max(Number.isFinite(itemPerPageRaw) ? itemPerPageRaw : 50, 1),
       200
     );
 
@@ -78,6 +131,7 @@ export async function GET(
         items_total: itemsTotal,
         item_page: itemPage,
         item_per_page: itemPerPage,
+        item_total_pages: itemsTotal ? Math.ceil(itemsTotal / itemPerPage) : 0,
       },
     });
   } catch (error) {

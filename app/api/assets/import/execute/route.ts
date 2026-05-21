@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { getUserIdFromToken, isTokenExpired } from '@/lib/api-auth';
+import { deriveBatchStatus } from '@/lib/assets/import-helpers';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -9,37 +11,46 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 
-async function authenticate(request: Request) {
+const INSERT_CHUNK = 100;
+
+function authenticate(request: Request) {
   const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-  if (!token) return { user: null, error: 'Missing token' };
-  const userClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
-  );
-  const { data: { user }, error } = await userClient.auth.getUser();
-  if (error || !user) return { user: null, error: 'Invalid token' };
-  return { user, error: null };
+  if (!token) return { userId: null, error: 'Missing token' };
+  if (isTokenExpired(token)) return { userId: null, error: 'Token expired' };
+  const userId = getUserIdFromToken(token);
+  if (!userId) return { userId: null, error: 'Invalid token' };
+  return { userId, error: null };
 }
 
 /**
  * POST /api/assets/import/execute
  * Body: { batch_id: string }
  * Inserts assets for each "pending" item in the batch. Skips "error" items.
- * Batches inserts in chunks of 100 to stay under timeouts.
+ * Idempotent on a per-batch basis: if the batch is already "completed",
+ * returns 409. While running, marks the batch as "processing".
  */
 export async function POST(request: Request): Promise<Response> {
   try {
-    const { user, error: authErr } = await authenticate(request);
-    if (!user) {
+    const { userId, error: authErr } = authenticate(request);
+    if (!userId) {
       return Response.json(
         { success: false, error: { message: authErr || 'Unauthorized' } },
         { status: 401 }
       );
     }
 
-    const { batch_id } = await request.json();
-    if (!batch_id) {
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json(
+        { success: false, error: { message: 'Invalid JSON body' } },
+        { status: 400 }
+      );
+    }
+
+    const batch_id = body?.batch_id;
+    if (!batch_id || typeof batch_id !== 'string') {
       return Response.json(
         { success: false, error: { message: 'batch_id is required' } },
         { status: 400 }
@@ -52,6 +63,7 @@ export async function POST(request: Request): Promise<Response> {
       .select('id, status')
       .eq('id', batch_id)
       .single();
+
     if (batchErr || !batch) {
       return Response.json(
         { success: false, error: { message: 'Batch not found' } },
@@ -64,10 +76,21 @@ export async function POST(request: Request): Promise<Response> {
         { status: 409 }
       );
     }
+    if (batch.status === 'processing') {
+      return Response.json(
+        { success: false, error: { message: 'Batch is currently processing' } },
+        { status: 409 }
+      );
+    }
 
+    // Mark as processing
     await supabase
       .from('asset_import_batches')
-      .update({ status: 'processing', updated_at: new Date().toISOString() })
+      .update({
+        status: 'processing',
+        updated_at: new Date().toISOString(),
+        updated_by: userId,
+      })
       .eq('id', batch_id);
 
     // Fetch pending items
@@ -79,6 +102,10 @@ export async function POST(request: Request): Promise<Response> {
       .order('row_number', { ascending: true });
 
     if (itemsErr) {
+      await supabase
+        .from('asset_import_batches')
+        .update({ status: 'failed', updated_at: new Date().toISOString() })
+        .eq('id', batch_id);
       return Response.json(
         { success: false, error: { message: itemsErr.message } },
         { status: 500 }
@@ -89,14 +116,15 @@ export async function POST(request: Request): Promise<Response> {
     let failed = 0;
     const errorDetails: Array<{ row: number; error: string }> = [];
 
-    // Process in chunks of 100
-    const CHUNK = 100;
-    for (let i = 0; i < (items?.length || 0); i += CHUNK) {
-      const chunk = items!.slice(i, i + CHUNK);
+    const allItems = items || [];
+
+    // Process in chunks
+    for (let i = 0; i < allItems.length; i += INSERT_CHUNK) {
+      const chunk = allItems.slice(i, i + INSERT_CHUNK);
       const inserts = chunk.map((it: any) => ({
         ...it.raw_data,
-        created_by: user.id,
-        updated_by: user.id,
+        created_by: userId,
+        updated_by: userId,
       }));
 
       const { data: inserted, error: insErr } = await supabase
@@ -111,8 +139,8 @@ export async function POST(request: Request): Promise<Response> {
             .from('assets')
             .insert({
               ...it.raw_data,
-              created_by: user.id,
-              updated_by: user.id,
+              created_by: userId,
+              updated_by: userId,
             })
             .select('id')
             .single();
@@ -161,21 +189,31 @@ export async function POST(request: Request): Promise<Response> {
           } else {
             failed++;
             errorDetails.push({ row: it.row_number, error: 'Insert returned no id' });
+            await supabase
+              .from('asset_import_items')
+              .update({
+                status: 'error',
+                validation_errors: ['Insert returned no id'],
+                processed_at: new Date().toISOString(),
+              })
+              .eq('id', it.id);
           }
         }
       }
     }
 
+    const finalStatus = deriveBatchStatus(success, failed);
+
     await supabase
       .from('asset_import_batches')
       .update({
-        status: 'completed',
+        status: finalStatus,
         processed_count: success + failed,
         success_count: success,
         error_count: failed,
         import_result: { success, failed, errors: errorDetails.slice(0, 50) },
         updated_at: new Date().toISOString(),
-        updated_by: user.id,
+        updated_by: userId,
       })
       .eq('id', batch_id);
 
@@ -188,7 +226,7 @@ export async function POST(request: Request): Promise<Response> {
         failed,
         errors: errorDetails.slice(0, 50),
       },
-      message: 'Import complete',
+      message: finalStatus === 'completed' ? 'Import complete' : 'Import finished with no successes',
     });
   } catch (error) {
     console.error('execute error:', error);
