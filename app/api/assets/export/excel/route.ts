@@ -1,19 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
-import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
-
-export const dynamic = 'force-dynamic';
+import { getUserIdFromToken, isTokenExpired } from '@/lib/api-auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { persistSession: false } }
 );
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request): Promise<Response> {
   try {
     const token = request.headers.get('Authorization')?.replace('Bearer ', '');
     if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json({ success: false, error: { message: 'Unauthorized' } }, { status: 401 });
+    }
+    if (isTokenExpired(token)) {
+      return Response.json({ success: false, error: { message: 'Token expired' } }, { status: 401 });
+    }
+    const userId = getUserIdFromToken(token);
+    if (!userId) {
+      return Response.json({ success: false, error: { message: 'Invalid token' } }, { status: 401 });
     }
 
     // Fetch all assets
@@ -23,7 +29,10 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return Response.json(
+        { success: false, error: { message: error.message } },
+        { status: 500 }
+      );
     }
 
     // Create workbook
@@ -78,7 +87,7 @@ export async function GET(request: NextRequest) {
     const buffer = await workbook.xlsx.writeBuffer();
 
     // Return as file
-    return new NextResponse(buffer, {
+    return new Response(buffer, {
       status: 200,
       headers: {
         'Content-Type':
@@ -88,8 +97,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Export error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Server error' },
+    return Response.json(
+      { success: false, error: { message: error instanceof Error ? error.message : 'Server error' } },
       { status: 500 }
     );
   }

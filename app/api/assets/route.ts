@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { CreateAssetRequest, CreateAssetResponse, Asset, ApiResponse } from '@/lib/assets/types';
+import { getUserIdFromToken, isTokenExpired } from '@/lib/api-auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -113,25 +114,16 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // Supabase 클라이언트 - 인증된 사용자로 설정
-    const userClient = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        global: {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      }
-    );
+    // 토큰 검증 및 사용자 ID 추출
+    if (isTokenExpired(token)) {
+      return Response.json(
+        { success: false, error: { message: 'Token expired' } },
+        { status: 401 }
+      );
+    }
 
-    // 현재 사용자 조회
-    const {
-      data: { user },
-      error: authError,
-    } = await userClient.auth.getUser();
-    if (authError || !user) {
+    const userId = getUserIdFromToken(token);
+    if (!userId) {
       return Response.json(
         { success: false, error: { message: 'Invalid token' } },
         { status: 401 }
@@ -195,8 +187,8 @@ export async function POST(request: Request): Promise<Response> {
           status: payload.status,
           remark: payload.remark || null,
           photos: payload.photos || [],
-          created_by: user.id,
-          updated_by: user.id,
+          created_by: userId,
+          updated_by: userId,
         },
       ])
       .select()

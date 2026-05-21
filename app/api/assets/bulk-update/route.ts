@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getUserIdFromToken, isTokenExpired } from '@/lib/api-auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,15 +12,11 @@ const VALID_STATUSES = ['active', 'idle', 'maintenance', 'sold', 'scrapped'];
 
 async function authenticate(request: Request) {
   const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-  if (!token) return { user: null, error: 'Missing token' };
-  const userClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
-  );
-  const { data: { user }, error } = await userClient.auth.getUser();
-  if (error || !user) return { user: null, error: 'Invalid token' };
-  return { user, error: null };
+  if (!token) return { userId: null, error: 'Missing token' };
+  if (isTokenExpired(token)) return { userId: null, error: 'Token expired' };
+  const userId = getUserIdFromToken(token);
+  if (!userId) return { userId: null, error: 'Invalid token' };
+  return { userId, error: null };
 }
 
 /**
@@ -29,8 +26,8 @@ async function authenticate(request: Request) {
  */
 export async function POST(request: Request): Promise<Response> {
   try {
-    const { user, error: authErr } = await authenticate(request);
-    if (!user) {
+    const { userId, error: authErr } = await authenticate(request);
+    if (!userId) {
       return Response.json(
         { success: false, error: { message: authErr || 'Unauthorized' } },
         { status: 401 }
@@ -60,7 +57,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // Whitelist
-    const update: Record<string, any> = { updated_by: user.id };
+    const update: Record<string, any> = { updated_by: userId };
     for (const key of ALLOWED_FIELDS) {
       if (key in updates) update[key] = updates[key];
     }
