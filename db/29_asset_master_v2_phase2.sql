@@ -155,6 +155,7 @@ language plpgsql
 as $$
 declare
   v_result jsonb := '{"success": 0, "errors": 0, "details": []}'::jsonb;
+  v_item record;
   v_item_id uuid;
   v_asset_id uuid;
   v_machine_asset_number text;
