@@ -51,6 +51,7 @@ create index if not exists asset_import_batches_org_id_idx
 -- P0-3: RLS 정책
 alter table asset_import_batches enable row level security;
 
+drop policy if exists "auth_all_import_batches" on asset_import_batches;
 create policy "auth_all_import_batches" on asset_import_batches
   for all to authenticated
   using (org_id = (auth.jwt() ->> 'org_id')::uuid)
@@ -97,6 +98,7 @@ create index if not exists asset_import_items_batch_status_idx
 -- P0-3: RLS 정책
 alter table asset_import_items enable row level security;
 
+drop policy if exists "auth_all_import_items" on asset_import_items;
 create policy "auth_all_import_items" on asset_import_items
   for all to authenticated
   using (
