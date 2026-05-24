@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { LanguageProvider } from '@/lib/i18n/context'
+import BottomNavApp from '@/components/BottomNavApp'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -14,9 +15,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body style={{ paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0))' }}>
         <LanguageProvider>
           {children}
+          <BottomNavApp />
         </LanguageProvider>
       </body>
     </html>

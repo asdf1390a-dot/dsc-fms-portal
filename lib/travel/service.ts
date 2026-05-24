@@ -173,16 +173,11 @@ export async function getTravelMembers(
 ) {
   const { data: members, error } = await supabase
     .from('travel_members')
-    .select(
-      `
-    *,
-    user:auth.users(id, email, user_metadata)
-  `
-    )
+    .select('*')
     .eq('travel_id', travelId);
 
   if (error) throw error;
-  return members;
+  return members || [];
 }
 
 /**

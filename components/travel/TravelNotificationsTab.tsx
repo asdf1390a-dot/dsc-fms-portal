@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 interface NotificationRule {
   id: string;
@@ -30,28 +31,40 @@ export default function TravelNotificationsTab({ travelId, onRefresh }: Props) {
     fetchRules();
   }, [travelId]);
 
+  async function getAuthHeaders(): Promise<Record<string, string> | null> {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+    return {
+      'x-user-id': session.user.id,
+      Authorization: `Bearer ${session.access_token}`,
+    };
+  }
+
   async function fetchRules() {
     try {
       setLoading(true);
-      const token = localStorage.getItem('sb-token');
-      if (!token) return;
+      const auth = await getAuthHeaders();
+      if (!auth) {
+        setError('로그인이 필요합니다.');
+        return;
+      }
 
       const response = await fetch(`/api/travels/${travelId}/notifications`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: auth,
       });
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error?.message || 'Failed to fetch rules');
+      if (!response.ok) {
+        throw new Error(data?.error || `Failed to fetch rules (${response.status})`);
       }
 
-      setRules(data.data || []);
+      setRules((data?.data || []) as NotificationRule[]);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : '알림 규칙을 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
@@ -59,14 +72,14 @@ export default function TravelNotificationsTab({ travelId, onRefresh }: Props) {
 
   async function handleToggle(ruleId: string, currentEnabled: boolean) {
     try {
-      const token = localStorage.getItem('sb-token');
-      if (!token) return;
+      const auth = await getAuthHeaders();
+      if (!auth) return;
 
       const response = await fetch(`/api/travels/${travelId}/notifications`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          ...auth,
         },
         body: JSON.stringify({
           ruleId,
@@ -76,8 +89,8 @@ export default function TravelNotificationsTab({ travelId, onRefresh }: Props) {
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error?.message || 'Failed to update rule');
+      if (!response.ok) {
+        throw new Error(data?.error || `Failed to update rule (${response.status})`);
       }
 
       fetchRules();
@@ -88,22 +101,22 @@ export default function TravelNotificationsTab({ travelId, onRefresh }: Props) {
 
   async function handleDeleteRule(ruleId: string) {
     try {
-      const token = localStorage.getItem('sb-token');
-      if (!token) return;
+      const auth = await getAuthHeaders();
+      if (!auth) return;
 
       const response = await fetch(`/api/travels/${travelId}/notifications`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          ...auth,
         },
         body: JSON.stringify({ ruleId }),
       });
 
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error?.message || 'Failed to delete rule');
+      if (!response.ok) {
+        throw new Error(data?.error || `Failed to delete rule (${response.status})`);
       }
 
       fetchRules();

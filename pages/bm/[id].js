@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/use-auth';
 import BottomNav from '../../components/BottomNav';
+import TechnicianSelect from '../../components/bm/TechnicianSelect';
 
 // ── Status flow & labels ────────────────────────────────────────────
 const STATUS_FLOW = {
@@ -53,6 +54,7 @@ export default function BMDetailPage() {
   const [error, setError] = useState(null);
   const [action, setAction] = useState('');
   const [cause, setCause] = useState('');
+  const [technicianId, setTechnicianId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [lightboxIdx, setLightboxIdx] = useState(null);
@@ -70,6 +72,7 @@ export default function BMDetailPage() {
       setEvent(data);
       setAction(data.action_taken || '');
       setCause(data.cause || '');
+      setTechnicianId(data.technician_id || null);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -105,9 +108,10 @@ export default function BMDetailPage() {
     setError(null);
     try {
       const { error } = await supabase.from('bm_events').update({
-        action_taken: action, cause,
+        action_taken: action, cause, technician_id: technicianId,
       }).eq('id', event.id);
       if (error) throw error;
+      setEvent(prev => ({ ...prev, action_taken: action, cause, technician_id: technicianId }));
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2200);
     } catch (err) {
@@ -118,25 +122,42 @@ export default function BMDetailPage() {
   }
 
   async function resolveNow() {
-    // One-tap "수리 완료 처리" — saves notes then flips status to resolved.
+    // One-tap "수리 완료 처리" — uses /api/bm/resolve for atomic, server-verified update.
+    // 1) persist notes + technician via direct update (RLS-protected)
+    // 2) call resolve API to flip status + record resolver
     if (!event) return;
     setBusy(true);
     setError(null);
     try {
-      const nowIso = new Date().toISOString();
-      const patch = {
+      // Step 1: save notes & technician first
+      const { error: upErr } = await supabase.from('bm_events').update({
         action_taken: action,
         cause,
-        status: 'resolved',
-        resolved_at: nowIso,
-        downtime_end: nowIso,
-        resolved_by: user?.id || null,
-        resolver_name: fullName || user?.email || null,
-      };
-      const { data, error } = await supabase.from('bm_events')
-        .update(patch).eq('id', event.id).select().single();
-      if (error) throw error;
-      setEvent(prev => ({ ...prev, ...data, assets: prev.assets }));
+        technician_id: technicianId,
+      }).eq('id', event.id);
+      if (upErr) throw upErr;
+
+      // Step 2: call resolve API with bearer token
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      if (!token) throw new Error('인증 토큰이 없습니다. 다시 로그인하세요.');
+
+      const resp = await fetch('/api/bm/resolve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          id: event.id,
+          resolver_name: fullName || user?.email || null,
+          action_taken: action,
+        }),
+      });
+      const json = await resp.json();
+      if (!resp.ok) throw new Error(json.error || 'resolve_failed');
+
+      setEvent(prev => ({ ...prev, ...json.event, assets: prev.assets, technician_id: technicianId }));
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2200);
     } catch (err) {
@@ -251,6 +272,16 @@ export default function BMDetailPage() {
                 </div>
               </Section>
             )}
+
+            {/* ── Technician (담당 기술자) ─────────────────────────── */}
+            <Section title="담당 기술자">
+              <TechnicianSelect
+                value={technicianId}
+                onChange={setTechnicianId}
+                disabled={!isAuthed || busy}
+                placeholder={isAuthed ? '기술자 선택' : '(미지정)'}
+              />
+            </Section>
 
             {/* ── Action taken ───────────────────────────────────── */}
             <Section title="조치 내용">
