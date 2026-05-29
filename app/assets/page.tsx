@@ -169,7 +169,19 @@ export default function AssetsPage() {
             <h1 className="text-4xl font-bold text-gray-900">{t('assets.title', language)}</h1>
             <p className="text-gray-600 mt-2">{t('assets.subtitle', language)}</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => router.push('/assets/statistics')}
+              className="px-4 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition text-sm"
+            >
+              {t('assets.stats_button', language)}
+            </button>
+            <button
+              onClick={() => router.push('/assets/import')}
+              className="px-4 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition text-sm"
+            >
+              {t('assets.import_button', language)}
+            </button>
             {assets.length > 0 && (
               <>
                 <button

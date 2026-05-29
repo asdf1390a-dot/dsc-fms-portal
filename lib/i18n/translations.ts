@@ -21,6 +21,40 @@ export const translations: Record<Language, Record<string, string>> = {
     'assets.csv_download': '📋 CSV 다운로드',
     'assets.exporting': '내보내는 중...',
     'assets.add_new': '+ 신규 자산',
+    'assets.import_button': '📥 일괄 등록',
+    'assets.stats_button': '📊 통계',
+
+    // Import page
+    'assets.import_title': '자산 일괄 등록',
+    'assets.import_subtitle': 'Excel 파일로 여러 자산을 한 번에 등록합니다',
+    'assets.import_template': '📄 템플릿 다운로드',
+    'assets.import_step1': '1단계 — Excel 파일 선택',
+    'assets.import_step2': '2단계 — 검토 및 확인',
+    'assets.import_step3': '3단계 — 결과',
+    'assets.import_preview': '검토하기',
+    'assets.import_previewing': '검토 중...',
+    'assets.import_execute': '등록 실행',
+    'assets.import_executing': '등록 중...',
+    'assets.import_total': '전체 행',
+    'assets.import_pending': '등록 대기',
+    'assets.import_errors': '오류',
+    'assets.import_inserted': '등록 완료',
+    'assets.import_failed': '실패',
+    'assets.import_view_assets': '자산 목록 보기',
+    'assets.import_another': '다시 가져오기',
+
+    // Statistics page
+    'assets.stats_title': '자산 통계',
+    'assets.stats_subtitle': '전체 자산 현황 한눈에 보기',
+    'assets.stats_total': '전체 자산 수',
+    'assets.stats_last_updated': '최근 업데이트',
+    'assets.stats_by_status': '상태별 분포',
+    'assets.stats_by_category': '카테고리별 분포',
+    'assets.stats_top_makes': '제조사 TOP 10',
+
+    // Common
+    'common.back': '← 뒤로',
+    'common.cancel': '취소',
 
     // Asset Detail
     'asset.basic_info': '기본 정보',
@@ -113,6 +147,40 @@ export const translations: Record<Language, Record<string, string>> = {
     'assets.csv_download': '📋 Download CSV',
     'assets.exporting': 'Exporting...',
     'assets.add_new': '+ New Asset',
+    'assets.import_button': '📥 Bulk Import',
+    'assets.stats_button': '📊 Statistics',
+
+    // Import page
+    'assets.import_title': 'Bulk Asset Import',
+    'assets.import_subtitle': 'Register multiple assets from an Excel file',
+    'assets.import_template': '📄 Download Template',
+    'assets.import_step1': 'Step 1 — Select Excel file',
+    'assets.import_step2': 'Step 2 — Review & confirm',
+    'assets.import_step3': 'Step 3 — Result',
+    'assets.import_preview': 'Preview',
+    'assets.import_previewing': 'Previewing...',
+    'assets.import_execute': 'Import',
+    'assets.import_executing': 'Importing...',
+    'assets.import_total': 'Total rows',
+    'assets.import_pending': 'Ready',
+    'assets.import_errors': 'Errors',
+    'assets.import_inserted': 'Inserted',
+    'assets.import_failed': 'Failed',
+    'assets.import_view_assets': 'View Assets',
+    'assets.import_another': 'Import another',
+
+    // Statistics page
+    'assets.stats_title': 'Asset Statistics',
+    'assets.stats_subtitle': 'Overview of all registered assets',
+    'assets.stats_total': 'Total Assets',
+    'assets.stats_last_updated': 'Last Updated',
+    'assets.stats_by_status': 'By Status',
+    'assets.stats_by_category': 'By Category',
+    'assets.stats_top_makes': 'Top 10 Makes',
+
+    // Common
+    'common.back': '← Back',
+    'common.cancel': 'Cancel',
 
     // Asset Detail
     'asset.basic_info': 'Basic Information',
