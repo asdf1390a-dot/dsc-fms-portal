@@ -41,13 +41,13 @@ export default function CEODashboard() {
 
   const [projects, setProjects] = useState<Project[]>([
     { id: '1', name: 'Asset Master Phase 2 UI', status: 'completed', progress: 100, owner: 'Web Dev #1', eta: '2026-05-29' },
-    { id: '2', name: 'Team Dashboard P1 API', status: 'completed', progress: 100, owner: 'Web Dev #2', eta: '2026-05-29' },
-    { id: '3', name: 'BM Phase 1', status: 'completed', progress: 100, owner: 'Web Dev #1', eta: '2026-05-29' },
-    { id: '4', name: 'Discord Bot Phase 1', status: 'completed', progress: 100, owner: 'Web Dev #2', eta: '2026-05-27' },
+    { id: '2', name: 'Team Dashboard P1 API', status: 'completed', progress: 100, owner: 'Secretary AI', eta: '2026-05-30' },
+    { id: '3', name: 'BM Phase 1', status: 'completed', progress: 100, owner: 'QA Specialist', eta: '2026-05-29' },
+    { id: '4', name: 'Discord Bot Phase 1', status: 'completed', progress: 100, owner: 'Web Dev #1', eta: '2026-05-27' },
     { id: '5', name: 'Travel Phase 2 UI', status: 'completed', progress: 100, owner: 'Web Dev #1', eta: '2026-05-27' },
-    { id: '6', name: 'Backup Phase 2 UI', status: 'completed', progress: 100, owner: 'Web Dev #1', eta: '2026-05-22' },
-    { id: '7', name: 'Team Dashboard Phase 2 UI', status: 'in-progress', progress: 50, owner: 'Planner', eta: '2026-06-10' },
-    { id: '8', name: 'Portfolio App', status: 'in-progress', progress: 40, owner: 'Web Dev #2', eta: '2026-06-02' },
+    { id: '6', name: 'Phase 2C (Trust Score)', status: 'completed', progress: 100, owner: 'Memory Specialist', eta: '2026-05-30' },
+    { id: '7', name: 'Backup Phase 2 UI', status: 'in-progress', progress: 80, owner: 'Web Dev #1', eta: '2026-05-30' },
+    { id: '8', name: 'Team Dashboard Phase 2 UI', status: 'in-progress', progress: 55, owner: 'Planner', eta: '2026-06-02' },
   ]);
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
