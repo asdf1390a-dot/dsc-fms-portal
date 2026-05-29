@@ -16,6 +16,7 @@
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
     "formidable": "^3.5.4",
+    "jsonwebtoken": "^9.0.3",
     "jszip": "^3.10.1",
     "next": "14.0.0",
     "postcss": "^8.5.14",
@@ -28,6 +29,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/react": "19.2.14",
     "pg": "^8.20.0",
     "typescript": "6.0.3"
