@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useLanguage } from '@/lib/i18n/context';
 
 interface DashboardMetrics {
   completionRate: number;
@@ -31,7 +30,6 @@ interface TeamMember {
 }
 
 export default function CEODashboard() {
-  const { t } = useLanguage();
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     completionRate: 77.8,
     reliabilityScore: 97,
