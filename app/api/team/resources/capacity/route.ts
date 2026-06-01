@@ -42,14 +42,17 @@ export async function GET(request: Request) {
       .gte('start_date', `${month}-01`)
       .lte('end_date', `${month}-31`);
 
+    let totalAllocated = 0;
     if (allocError) {
-      return jsonResponse(
-        { error: allocError.message, code: allocError.code },
-        400
-      );
+      if (allocError.code !== 'PGRST116' && allocError.code !== 'PGRST205' && !allocError.message?.includes('does not exist') && !allocError.message?.includes('Could not find the table')) {
+        return jsonResponse(
+          { error: allocError.message, code: allocError.code },
+          400
+        );
+      }
+    } else {
+      totalAllocated = allocations?.reduce((sum, a) => sum + (a.allocated_hours || 0), 0) || 0;
     }
-
-    const totalAllocated = allocations?.reduce((sum, a) => sum + (a.allocated_hours || 0), 0) || 0;
     const totalAvailable = totalTeamCapacity - totalAllocated;
     const teamAllocationPercentage = totalTeamCapacity > 0
       ? Math.round((totalAllocated / totalTeamCapacity) * 100)

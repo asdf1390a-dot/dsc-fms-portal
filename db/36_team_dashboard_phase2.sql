@@ -48,32 +48,12 @@ ALTER TABLE portfolio_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE milestones ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies — Portfolio Items
-CREATE POLICY "portfolio_items_select" ON portfolio_items
-  FOR SELECT USING (true);
-
-CREATE POLICY "portfolio_items_insert" ON portfolio_items
-  FOR INSERT WITH CHECK (member_id = auth.uid());
-
-CREATE POLICY "portfolio_items_update" ON portfolio_items
-  FOR UPDATE USING (member_id = auth.uid() OR auth.jwt() ->> 'role' = 'admin')
-  WITH CHECK (member_id = auth.uid() OR auth.jwt() ->> 'role' = 'admin');
-
-CREATE POLICY "portfolio_items_delete" ON portfolio_items
-  FOR DELETE USING (member_id = auth.uid() OR auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "portfolio_items_all" ON portfolio_items
+  FOR ALL USING (true);
 
 -- RLS Policies — Milestones
-CREATE POLICY "milestones_select" ON milestones
-  FOR SELECT USING (true);
-
-CREATE POLICY "milestones_insert" ON milestones
-  FOR INSERT WITH CHECK (auth.jwt() ->> 'role' IN ('admin', 'planner'));
-
-CREATE POLICY "milestones_update" ON milestones
-  FOR UPDATE USING (auth.jwt() ->> 'role' IN ('admin', 'planner'))
-  WITH CHECK (auth.jwt() ->> 'role' IN ('admin', 'planner'));
-
-CREATE POLICY "milestones_delete" ON milestones
-  FOR DELETE USING (auth.jwt() ->> 'role' = 'admin');
+CREATE POLICY "milestones_all" ON milestones
+  FOR ALL USING (true);
 
 -- Triggers for updated_at
 CREATE OR REPLACE FUNCTION update_portfolio_items_timestamp()

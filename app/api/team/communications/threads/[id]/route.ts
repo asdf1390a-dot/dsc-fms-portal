@@ -29,6 +29,12 @@ export async function GET(
       .single();
 
     if (threadError) {
+      if (threadError.code === 'PGRST116' || threadError.code === 'PGRST205' || threadError.message?.includes('does not exist') || threadError.message?.includes('Could not find the table')) {
+        return jsonResponse(
+          { error: 'Thread not found', notice: 'Table team_message_threads not yet initialized' },
+          404
+        );
+      }
       return jsonResponse(
         { error: 'Thread not found' },
         404
@@ -46,6 +52,14 @@ export async function GET(
       .order('message_timestamp', { ascending: true });
 
     if (messagesError) {
+      if (messagesError.code === 'PGRST116' || messagesError.code === 'PGRST205' || messagesError.message?.includes('does not exist') || messagesError.message?.includes('Could not find the table')) {
+        return jsonResponse({
+          thread,
+          messages: [],
+          totalMessages: 0,
+          notice: 'Table team_messages not yet initialized',
+        });
+      }
       return jsonResponse(
         { error: messagesError.message, code: messagesError.code },
         400

@@ -85,6 +85,17 @@ export async function GET(request: Request) {
       .range(offset, offset + limit - 1);
 
     if (error) {
+      if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.message?.includes('does not exist') || error.message?.includes('Could not find the table')) {
+        return jsonResponse({
+          data: [],
+          count: 0,
+          limit,
+          offset,
+          period: { days, startDate },
+          channels,
+          notice: 'Table team_messages not yet initialized',
+        });
+      }
       return jsonResponse(
         { error: error.message, code: error.code },
         400

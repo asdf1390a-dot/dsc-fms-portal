@@ -34,6 +34,15 @@ export async function GET(request: Request) {
       .range(offset, offset + limit - 1);
 
     if (error) {
+      if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.message?.includes('does not exist') || error.message?.includes('Could not find the table')) {
+        return jsonResponse({
+          data: [],
+          count: 0,
+          limit,
+          offset,
+          notice: 'Table team_message_threads not yet initialized',
+        });
+      }
       return jsonResponse(
         { error: error.message, code: error.code },
         400

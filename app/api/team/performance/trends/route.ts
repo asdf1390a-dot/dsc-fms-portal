@@ -35,6 +35,15 @@ export async function GET(request: Request) {
       .limit(weeks);
 
     if (error) {
+      if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.message?.includes('does not exist') || error.message?.includes('Could not find the table')) {
+        return jsonResponse({
+          memberId,
+          weeks,
+          data: [],
+          total: 0,
+          notice: 'Table team_performance_metrics not yet initialized',
+        });
+      }
       return jsonResponse(
         { error: error.message, code: error.code },
         400
