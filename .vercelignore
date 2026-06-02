@@ -1,0 +1,45 @@
+# Dependencies - will be installed on Vercel
+node_modules
+
+# Test artifacts
+playwright-report
+.playwright
+coverage
+.nyc_output
+
+# Development files
+.env.local
+.env.*.local
+.git
+.gitignore
+.eslintignore
+.prettierignore
+
+# Build/Cache
+.next/cache
+.turbo
+dist
+build
+
+# Documentation
+*.md
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Backup files
+BACKUPS/
+*.backup
+*.bak

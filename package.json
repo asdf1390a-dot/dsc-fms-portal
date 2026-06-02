@@ -4,7 +4,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "playwright test",
+    "test:assets": "playwright test __tests__/api/assets.integration.test.ts",
+    "test:debug": "playwright test --debug",
+    "test:perf": "API_URL=http://localhost:3000 npm run test:assets -- --grep 'Performance'",
+    "test:watch": "playwright test --watch"
   },
   "dependencies": {
     "@babel/register": "^7.23.0",
@@ -31,6 +36,7 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@types/react": "19.2.14",
+    "@types/node": "^20.0.0",
     "pg": "^8.20.0",
     "typescript": "6.0.3"
   }
