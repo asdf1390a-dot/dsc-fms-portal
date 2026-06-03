@@ -37,7 +37,7 @@ export default function AutoBackupSettings() {
     (async () => {
       try {
         setLoading(true);
-        const data = await apiGet('/api/backup/schedule/configure');
+        const data = await apiGet('/api/backup/settings');
         setPolicy({ ...DEFAULT_POLICY, ...(data.policy || {}) });
         setError(null);
       } catch (e) {
@@ -62,7 +62,7 @@ export default function AutoBackupSettings() {
         auto_delete_enabled: merged.auto_delete_enabled,
         warning_threshold_percent: merged.warning_threshold_percent,
       };
-      const data = await apiPost('/api/backup/schedule/configure', payload);
+      const data = await apiPost('/api/backup/settings', payload);
       setPolicy({ ...DEFAULT_POLICY, ...(data.policy || {}) });
       setSavedAt(Date.now());
       setTimeout(() => setSavedAt((v) => (Date.now() - v > 2500 ? null : v)), 3000);
