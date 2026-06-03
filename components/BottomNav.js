@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 // Active route gets red accent. Respects iOS safe-area inset.
 const ITEMS = [
   { href: '/',          label: 'Home',  match: (p) => p === '/',                                  icon: HomeIcon },
-  { href: '/bm',        label: 'BM',    match: (p) => p === '/bm' || p.startsWith('/bm/'),         icon: WrenchIcon },
+  { href: '/breakdowns',        label: 'BM',    match: (p) => p === '/breakdowns' || p.startsWith('/breakdowns/'),         icon: WrenchIcon },
   { href: '/pm',        label: 'PM',    match: (p) => p === '/pm' || p.startsWith('/pm/'),         icon: ClipboardIcon },
   { href: '/disposals', label: '자산',  match: (p) => p === '/disposals' || p.startsWith('/disposals/'), icon: FactoryIcon },
   { href: '/kpi',       label: 'KPI',   match: (p) => p === '/kpi' || p.startsWith('/kpi/'),         icon: ChartIcon },
