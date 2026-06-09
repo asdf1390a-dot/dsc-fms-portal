@@ -16,7 +16,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const saved = localStorage.getItem('language') as Language;
-    if (saved && (saved === 'ko' || saved === 'en')) {
+    if (saved && (saved === 'ko' || saved === 'en' || saved === 'ta' || saved === 'hi')) {
       setLanguageState(saved);
     }
     setMounted(true);
@@ -34,10 +34,32 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Returns the current language context.
+ *
+ * Hook order must stay consistent on every render, so we always call useState
+ * and useEffect — but they only matter when there's no provider above us
+ * (Pages Router prerender, ad-hoc consumers). When a real provider exists,
+ * its value is returned and the local fallback state is ignored.
+ */
 export function useLanguage() {
-  const context = useContext(LanguageContext);
-  if (!context) {
-    throw new Error('useLanguage must be used within LanguageProvider');
-  }
-  return context;
+  const provided = useContext(LanguageContext);
+  const [fallbackLang, setFallbackLang] = useState<Language>('ko');
+
+  useEffect(() => {
+    if (provided) return;
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('language') as Language | null;
+    if (saved && (saved === 'ko' || saved === 'en' || saved === 'ta' || saved === 'hi')) {
+      setFallbackLang(saved);
+    }
+  }, [provided]);
+
+  if (provided) return provided;
+
+  const setLanguage = (lang: Language) => {
+    setFallbackLang(lang);
+    if (typeof window !== 'undefined') localStorage.setItem('language', lang);
+  };
+  return { language: fallbackLang, setLanguage };
 }
