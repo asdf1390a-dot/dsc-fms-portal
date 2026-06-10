@@ -6,66 +6,87 @@ export const fetchCache = 'force-no-store';
 
 import { useEffect, useMemo, useState } from 'react';
 
-type RmRow = {
+type MonthShort =
+  | 'jan' | 'feb' | 'mar' | 'apr' | 'may' | 'jun'
+  | 'jul' | 'aug' | 'sep' | 'oct' | 'nov' | 'dec';
+
+type Row = {
   id: number;
+  code: string;
+  name: string;
+  name_ko: string | null;
+  group: string;       // 'R&M' | '부자재' | '전력' | '기타'
+  readonly: boolean;
+  unit: string;        // 'Rs' | 'KG'
+  note: string | null;
+  source: string | null;
+  total: number;
+} & Record<MonthShort, number>;
+
+type ApiResp = {
+  ok: boolean;
+  success: boolean;
   year: number;
-  category: string;
-  item: string;
-  sort_order: number;
-  january: number; february: number; march: number; april: number;
-  may: number; june: number; july: number; august: number;
-  september: number; october: number; november: number; december: number;
-  remarks: string | null;
-  updated_by: string | null;
-  updated_at: string;
+  groups: Record<string, Row[]>;
+  summary: {
+    total_rs: number;
+    r_m_total: number;
+    material_total: number;
+    power_total: number;
+    other_total: number;
+    tech_managed_total: number;
+  };
+  error?: string;
 };
 
-const MONTHS = [
-  { key: 'january',   label: 'JAN' },
-  { key: 'february',  label: 'FEB' },
-  { key: 'march',     label: 'MAR' },
-  { key: 'april',     label: 'APR' },
-  { key: 'may',       label: 'MAY' },
-  { key: 'june',      label: 'JUN' },
-  { key: 'july',      label: 'JUL' },
-  { key: 'august',    label: 'AUG' },
-  { key: 'september', label: 'SEP' },
-  { key: 'october',   label: 'OCT' },
-  { key: 'november',  label: 'NOV' },
-  { key: 'december',  label: 'DEC' },
-] as const;
+const MONTHS: { key: MonthShort; label: string }[] = [
+  { key: 'jan', label: 'JAN' }, { key: 'feb', label: 'FEB' },
+  { key: 'mar', label: 'MAR' }, { key: 'apr', label: 'APR' },
+  { key: 'may', label: 'MAY' }, { key: 'jun', label: 'JUN' },
+  { key: 'jul', label: 'JUL' }, { key: 'aug', label: 'AUG' },
+  { key: 'sep', label: 'SEP' }, { key: 'oct', label: 'OCT' },
+  { key: 'nov', label: 'NOV' }, { key: 'dec', label: 'DEC' },
+];
 
-type MonthKey = typeof MONTHS[number]['key'];
+const GROUP_ORDER = ['R&M', '부자재', '전력', '기타'] as const;
+const GROUP_LABEL: Record<string, string> = {
+  'R&M':   'R&M 수리비 (편집 가능)',
+  '부자재': '부자재 (편집 가능)',
+  '전력':   '전력 비용 (읽기 전용)',
+  '기타':   '기타 / 참고용 (읽기 전용)',
+};
 
-function fmt(n: number): string {
+function fmt(n: number, unit: string = 'Rs'): string {
   if (!Number.isFinite(n) || n === 0) return '';
-  return n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  const s = n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  return unit === 'KG' ? `${s} KG` : s;
 }
 
-function rowTotal(r: RmRow): number {
-  return MONTHS.reduce((sum, m) => sum + Number(r[m.key] || 0), 0);
+function sumRows(rows: Row[], month: MonthShort): number {
+  return rows.filter(r => r.unit === 'Rs').reduce((s, r) => s + Number(r[month] || 0), 0);
+}
+
+function sumRowsTotal(rows: Row[]): number {
+  return rows.filter(r => r.unit === 'Rs').reduce((s, r) => s + r.total, 0);
 }
 
 export default function RmPage() {
   const [year, setYear] = useState(2026);
-  const [rows, setRows] = useState<RmRow[]>([]);
+  const [data, setData] = useState<ApiResp | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ id: number; key: MonthKey } | null>(null);
+  const [editing, setEditing] = useState<{ id: number; month: MonthShort } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [saving, setSaving] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
-  const [newCategory, setNewCategory] = useState('');
-  const [newItem, setNewItem] = useState('');
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/r-m?year=${year}`, { cache: 'no-store' });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'load failed');
-      setRows(data.rows || []);
+      const res = await fetch(`/api/rm/expenses?year=${year}`, { cache: 'no-store' });
+      const j: ApiResp = await res.json();
+      if (!j.ok) throw new Error(j.error || 'load failed');
+      setData(j);
     } catch (e: any) {
       setError(e?.message || String(e));
     } finally {
@@ -75,31 +96,50 @@ export default function RmPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [year]);
 
+  const allRows = useMemo<Row[]>(() => {
+    if (!data) return [];
+    return GROUP_ORDER.flatMap(g => data.groups[g] || []);
+  }, [data]);
+
   const monthlyTotals = useMemo(() => {
-    const totals: Record<string, number> = {};
-    for (const m of MONTHS) totals[m.key] = 0;
-    for (const r of rows) for (const m of MONTHS) totals[m.key] += Number(r[m.key] || 0);
-    return totals;
-  }, [rows]);
+    const r: Record<MonthShort, number> = {} as any;
+    for (const m of MONTHS) r[m.key] = sumRows(allRows, m.key);
+    return r;
+  }, [allRows]);
 
-  const grandTotal = useMemo(
-    () => MONTHS.reduce((s, m) => s + monthlyTotals[m.key], 0),
-    [monthlyTotals]
-  );
+  const monthlyTechTotals = useMemo(() => {
+    const r: Record<MonthShort, number> = {} as any;
+    const tech = allRows.filter(x => !x.readonly);
+    for (const m of MONTHS) r[m.key] = sumRows(tech, m.key);
+    return r;
+  }, [allRows]);
 
-  async function saveCell(id: number, key: MonthKey, value: string) {
+  async function saveCell(row: Row, month: MonthShort, value: string) {
+    if (row.readonly) { setEditing(null); return; }
     setSaving(true);
     try {
       const n = value === '' ? 0 : Number(value.replace(/,/g, ''));
-      if (!Number.isFinite(n)) throw new Error('숫자가 아님');
-      const res = await fetch('/api/r-m', {
-        method: 'POST',
+      if (!Number.isFinite(n) || n < 0) throw new Error('숫자가 아님');
+      const res = await fetch('/api/rm/expenses', {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, [key]: n }),
+        body: JSON.stringify({ id: row.id, month, amount: n }),
       });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'save failed');
-      setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: n } : r));
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error || 'save failed');
+      // optimistic local update
+      setData(prev => {
+        if (!prev) return prev;
+        const grp = { ...prev.groups };
+        for (const g of Object.keys(grp)) {
+          grp[g] = grp[g].map(r =>
+            r.id === row.id
+              ? { ...r, [month]: n, total: r.total - Number(r[month] || 0) + n }
+              : r
+          );
+        }
+        return { ...prev, groups: grp };
+      });
     } catch (e: any) {
       alert('저장 실패: ' + (e?.message || e));
     } finally {
@@ -108,67 +148,43 @@ export default function RmPage() {
     }
   }
 
-  async function addRow() {
-    if (!newCategory.trim()) { alert('카테고리는 필수'); return; }
-    setSaving(true);
-    try {
-      const res = await fetch('/api/r-m', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          year,
-          category: newCategory.trim(),
-          item: newItem.trim(),
-          sort_order: 99,
-        }),
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || 'add failed');
-      setNewCategory(''); setNewItem(''); setShowAdd(false);
-      await load();
-    } catch (e: any) {
-      alert('추가 실패: ' + (e?.message || e));
-    } finally {
-      setSaving(false);
-    }
-  }
-
   function downloadCSV() {
-    const header = ['Category', 'Item', ...MONTHS.map(m => m.label), 'Total', 'Remarks'];
+    if (!data) return;
+    const header = ['Group', 'Code', 'Category', 'Korean', 'Unit', ...MONTHS.map(m => m.label), 'Total', 'ReadOnly', 'Note'];
     const lines = [header.join(',')];
-    for (const r of rows) {
-      const cells = [
-        `"${r.category.replace(/"/g, '""')}"`,
-        `"${(r.item || '').replace(/"/g, '""')}"`,
-        ...MONTHS.map(m => String(Number(r[m.key] || 0))),
-        String(rowTotal(r)),
-        `"${(r.remarks || '').replace(/"/g, '""')}"`,
-      ];
-      lines.push(cells.join(','));
+    for (const g of GROUP_ORDER) {
+      for (const r of (data.groups[g] || [])) {
+        const cells = [
+          `"${g}"`,
+          r.code,
+          `"${r.name.replace(/"/g, '""')}"`,
+          `"${(r.name_ko || '').replace(/"/g, '""')}"`,
+          r.unit,
+          ...MONTHS.map(m => String(Number(r[m.key] || 0))),
+          String(r.total),
+          r.readonly ? 'YES' : 'NO',
+          `"${(r.note || '').replace(/"/g, '""')}"`,
+        ];
+        lines.push(cells.join(','));
+      }
     }
-    const totalsRow = [
-      'TOTAL', '',
-      ...MONTHS.map(m => String(monthlyTotals[m.key])),
-      String(grandTotal), '',
-    ];
-    lines.push(totalsRow.join(','));
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `rm_costs_${year}.csv`; a.click();
+    a.href = url; a.download = `rm_expenses_${year}.csv`; a.click();
     URL.revokeObjectURL(url);
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-3 sm:p-6">
-      <div className="max-w-[1400px] mx-auto">
+      <div className="max-w-[1500px] mx-auto">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-              R&amp;M Monthly Cost (수리·유지보수 월별 비용)
+              R&amp;M Monthly Cost — 통합 비용 관리 (16개 카테고리)
             </h1>
             <p className="text-xs sm:text-sm text-gray-500 mt-1">
-              엑셀 시트와 동일한 행=항목 / 열=월 구조. 셀을 클릭해 직접 편집.
+              R&amp;M·부자재는 편집 가능, 전력·기타는 읽기 전용 (참고용). 셀 클릭 → 입력 → Enter.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -180,12 +196,6 @@ export default function RmPage() {
               {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
             </select>
             <button
-              onClick={() => setShowAdd(s => !s)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm font-medium"
-            >
-              + 행 추가
-            </button>
-            <button
               onClick={downloadCSV}
               className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm font-medium"
             >
@@ -194,45 +204,19 @@ export default function RmPage() {
           </div>
         </div>
 
-        {showAdd && (
-          <div className="bg-white border rounded p-3 mb-3 flex flex-wrap gap-2 items-end">
-            <div>
-              <label className="block text-xs text-gray-600">카테고리 *</label>
-              <input
-                value={newCategory}
-                onChange={e => setNewCategory(e.target.value)}
-                placeholder="예: 1.6 Plant Maintenance"
-                className="border rounded px-2 py-2 text-base w-64"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-600">항목 (선택)</label>
-              <input
-                value={newItem}
-                onChange={e => setNewItem(e.target.value)}
-                placeholder="세부 항목"
-                className="border rounded px-2 py-2 text-base w-48"
-              />
-            </div>
-            <button
-              onClick={addRow}
-              disabled={saving}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded text-sm"
-            >
-              저장
-            </button>
-            <button
-              onClick={() => setShowAdd(false)}
-              className="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded text-sm"
-            >
-              취소
-            </button>
-          </div>
-        )}
-
         {error && (
           <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded mb-3 text-sm">
             오류: {error}
+          </div>
+        )}
+
+        {data && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+            <SummaryCard label="R&M 합계"       value={data.summary.r_m_total} tone="blue" />
+            <SummaryCard label="부자재 합계"     value={data.summary.material_total} tone="indigo" />
+            <SummaryCard label="전력 (참고)"     value={data.summary.power_total} tone="gray" />
+            <SummaryCard label="기타 (참고)"     value={data.summary.other_total} tone="gray" />
+            <SummaryCard label="기술팀 관제 합계" value={data.summary.tech_managed_total} tone="green" emph />
           </div>
         )}
 
@@ -240,8 +224,8 @@ export default function RmPage() {
           <table className="w-full text-xs sm:text-sm border-collapse">
             <thead className="bg-gray-100 sticky top-0">
               <tr>
-                <th className="border border-gray-300 px-2 py-2 text-left min-w-[200px] sticky left-0 bg-gray-100 z-10">
-                  Category / 항목
+                <th className="border border-gray-300 px-2 py-2 text-left min-w-[260px] sticky left-0 bg-gray-100 z-10">
+                  Code / Category
                 </th>
                 {MONTHS.map(m => (
                   <th key={m.key} className="border border-gray-300 px-2 py-2 text-right min-w-[90px]">
@@ -251,94 +235,186 @@ export default function RmPage() {
                 <th className="border border-gray-300 px-2 py-2 text-right min-w-[110px] bg-yellow-50">
                   Total
                 </th>
-                <th className="border border-gray-300 px-2 py-2 text-left min-w-[140px]">
-                  Remarks
-                </th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={MONTHS.length + 3} className="text-center py-6 text-gray-400">로딩 중...</td></tr>
+                <tr><td colSpan={MONTHS.length + 2} className="text-center py-6 text-gray-400">로딩 중...</td></tr>
               )}
-              {!loading && rows.length === 0 && (
-                <tr><td colSpan={MONTHS.length + 3} className="text-center py-6 text-gray-400">데이터 없음</td></tr>
-              )}
-              {!loading && rows.map(r => (
-                <tr key={r.id} className="hover:bg-blue-50">
-                  <td className="border border-gray-300 px-2 py-1 sticky left-0 bg-white hover:bg-blue-50">
-                    <div className="font-medium text-gray-900">{r.category}</div>
-                    {r.item && <div className="text-xs text-gray-500">{r.item}</div>}
-                  </td>
-                  {MONTHS.map(m => {
-                    const isEd = editing?.id === r.id && editing?.key === m.key;
-                    const val = Number(r[m.key] || 0);
-                    return (
-                      <td
-                        key={m.key}
-                        className="border border-gray-300 px-1 py-0 text-right cursor-pointer"
-                        onClick={() => {
-                          if (!isEd) {
-                            setEditing({ id: r.id, key: m.key });
-                            setEditValue(val === 0 ? '' : String(val));
-                          }
-                        }}
-                      >
-                        {isEd ? (
-                          <input
-                            autoFocus
-                            value={editValue}
-                            onChange={e => setEditValue(e.target.value)}
-                            onBlur={() => saveCell(r.id, m.key, editValue)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') saveCell(r.id, m.key, editValue);
-                              if (e.key === 'Escape') setEditing(null);
-                            }}
-                            className="w-full text-right border-0 outline-none bg-yellow-50 px-1 py-1 text-sm"
-                            inputMode="numeric"
-                          />
-                        ) : (
-                          <span className="block px-1 py-1">{fmt(val)}</span>
-                        )}
-                      </td>
-                    );
-                  })}
-                  <td className="border border-gray-300 px-2 py-1 text-right font-semibold bg-yellow-50">
-                    {fmt(rowTotal(r))}
-                  </td>
-                  <td className="border border-gray-300 px-2 py-1 text-xs text-gray-600">
-                    {r.remarks || ''}
-                  </td>
-                </tr>
-              ))}
-              {!loading && rows.length > 0 && (
-                <tr className="bg-gray-100 font-bold">
-                  <td className="border border-gray-300 px-2 py-2 sticky left-0 bg-gray-100">
-                    월별 합계 (Rs)
-                  </td>
-                  {MONTHS.map(m => (
-                    <td key={m.key} className="border border-gray-300 px-2 py-2 text-right">
-                      {fmt(monthlyTotals[m.key])}
+              {!loading && data && GROUP_ORDER.map(group => {
+                const rows = data.groups[group] || [];
+                if (rows.length === 0) return null;
+                const groupReadOnly = rows.every(r => r.readonly);
+                return (
+                  <GroupBlock
+                    key={group}
+                    group={group}
+                    rows={rows}
+                    readOnly={groupReadOnly}
+                    editing={editing}
+                    setEditing={setEditing}
+                    editValue={editValue}
+                    setEditValue={setEditValue}
+                    saveCell={saveCell}
+                  />
+                );
+              })}
+
+              {!loading && data && (
+                <>
+                  <tr className="bg-blue-50 font-bold">
+                    <td className="border border-gray-300 px-2 py-2 sticky left-0 bg-blue-50">
+                      기술팀 관제 월별 합계 (Rs)
                     </td>
-                  ))}
-                  <td className="border border-gray-300 px-2 py-2 text-right bg-yellow-100">
-                    {fmt(grandTotal)}
-                  </td>
-                  <td className="border border-gray-300"></td>
-                </tr>
+                    {MONTHS.map(m => (
+                      <td key={m.key} className="border border-gray-300 px-2 py-2 text-right">
+                        {fmt(monthlyTechTotals[m.key])}
+                      </td>
+                    ))}
+                    <td className="border border-gray-300 px-2 py-2 text-right bg-blue-100">
+                      {fmt(data.summary.tech_managed_total)}
+                    </td>
+                  </tr>
+                  <tr className="bg-gray-200 font-bold">
+                    <td className="border border-gray-300 px-2 py-2 sticky left-0 bg-gray-200">
+                      전체 월별 합계 (Rs, 전력·기타 포함)
+                    </td>
+                    {MONTHS.map(m => (
+                      <td key={m.key} className="border border-gray-300 px-2 py-2 text-right">
+                        {fmt(monthlyTotals[m.key])}
+                      </td>
+                    ))}
+                    <td className="border border-gray-300 px-2 py-2 text-right bg-yellow-100">
+                      {fmt(data.summary.total_rs)}
+                    </td>
+                  </tr>
+                </>
               )}
             </tbody>
           </table>
         </div>
 
-        <div className="mt-4 text-xs text-gray-500">
-          {saving && <span className="text-blue-600">저장 중...</span>}
-          {!saving && <span>셀 클릭 → 숫자 입력 → Enter (또는 다른 곳 클릭) 으로 저장. 모든 값 단위 Rs.</span>}
-        </div>
-
-        <div className="mt-2 text-xs text-gray-500">
-          ※ 데이터 출처: 8개 Excel 비용 파일 분석 (Jan-Apr 2026), 5월부터는 각 팀이 직접 입력
+        <div className="mt-3 text-xs text-gray-500 leading-relaxed">
+          {saving ? <span className="text-blue-600">저장 중...</span> :
+            <span>셀 클릭 → 숫자 입력 → Enter 저장. 회색 행(전력 4.1 / 기타 4.2·4.3)은 편집 불가.</span>}
+          <br/>
+          데이터 출처: TALLY DOWNLOAD (2026 1~4월 실적), 5월 이후 각 팀 직접 입력. 단위 Rs (단, 4.2 일일소비량은 KG).
         </div>
       </div>
     </div>
+  );
+}
+
+/* ───────── components ───────── */
+
+function SummaryCard({ label, value, tone, emph }: { label: string; value: number; tone: 'blue'|'indigo'|'gray'|'green'; emph?: boolean }) {
+  const bg = {
+    blue:   'bg-blue-50   border-blue-200   text-blue-900',
+    indigo: 'bg-indigo-50 border-indigo-200 text-indigo-900',
+    gray:   'bg-gray-100  border-gray-300   text-gray-700',
+    green:  'bg-green-50  border-green-300  text-green-900',
+  }[tone];
+  return (
+    <div className={`border rounded p-2 ${bg} ${emph ? 'ring-2 ring-green-400' : ''}`}>
+      <div className="text-[11px] font-medium opacity-80">{label}</div>
+      <div className="text-sm sm:text-base font-bold tabular-nums">
+        Rs {value.toLocaleString('en-IN')}
+      </div>
+    </div>
+  );
+}
+
+function GroupBlock({
+  group, rows, readOnly,
+  editing, setEditing, editValue, setEditValue, saveCell,
+}: {
+  group: string;
+  rows: Row[];
+  readOnly: boolean;
+  editing: { id: number; month: MonthShort } | null;
+  setEditing: (v: any) => void;
+  editValue: string;
+  setEditValue: (v: string) => void;
+  saveCell: (row: Row, month: MonthShort, value: string) => void;
+}) {
+  const groupBg = readOnly ? 'bg-gray-100' : 'bg-blue-50';
+  const subtotalBg = readOnly ? 'bg-gray-200' : 'bg-blue-100';
+
+  // group subtotal per month (Rs only)
+  const monthSub = (m: MonthShort) =>
+    rows.filter(r => r.unit === 'Rs').reduce((s, r) => s + Number(r[m] || 0), 0);
+  const groupSubTotal = rows.filter(r => r.unit === 'Rs').reduce((s, r) => s + r.total, 0);
+
+  return (
+    <>
+      <tr className={`${groupBg} font-semibold`}>
+        <td colSpan={MONTHS.length + 2} className={`border border-gray-300 px-2 py-1 sticky left-0 ${groupBg}`}>
+          ▸ {GROUP_LABEL[group] || group}
+        </td>
+      </tr>
+      {rows.map(r => (
+        <tr key={r.id} className={r.readonly ? 'bg-gray-50 text-gray-600' : 'hover:bg-yellow-50'}>
+          <td className={`border border-gray-300 px-2 py-1 sticky left-0 ${r.readonly ? 'bg-gray-50' : 'bg-white hover:bg-yellow-50'}`}>
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] font-mono text-gray-500">{r.code}</span>
+              <span className="font-medium text-gray-900">{r.name}</span>
+              {r.readonly && <span className="text-[10px] text-gray-500 ml-1">🔒</span>}
+            </div>
+            {r.name_ko && <div className="text-[11px] text-gray-500">{r.name_ko}</div>}
+            {r.note && <div className="text-[10px] text-gray-400 italic">{r.note}</div>}
+          </td>
+          {MONTHS.map(m => {
+            const isEd = !r.readonly && editing?.id === r.id && editing?.month === m.key;
+            const val = Number(r[m.key] || 0);
+            return (
+              <td
+                key={m.key}
+                className={`border border-gray-300 px-1 py-0 text-right ${r.readonly ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                onClick={() => {
+                  if (r.readonly) return;
+                  if (!isEd) {
+                    setEditing({ id: r.id, month: m.key });
+                    setEditValue(val === 0 ? '' : String(val));
+                  }
+                }}
+              >
+                {isEd ? (
+                  <input
+                    autoFocus
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    onBlur={() => saveCell(r, m.key, editValue)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveCell(r, m.key, editValue);
+                      if (e.key === 'Escape') setEditing(null);
+                    }}
+                    className="w-full text-right border-0 outline-none bg-yellow-100 px-1 py-1 text-sm"
+                    inputMode="numeric"
+                  />
+                ) : (
+                  <span className="block px-1 py-1 tabular-nums">{fmt(val, r.unit)}</span>
+                )}
+              </td>
+            );
+          })}
+          <td className="border border-gray-300 px-2 py-1 text-right font-semibold bg-yellow-50 tabular-nums">
+            {fmt(r.total, r.unit)}
+          </td>
+        </tr>
+      ))}
+      <tr className={`${subtotalBg} font-semibold text-xs`}>
+        <td className={`border border-gray-300 px-2 py-1 sticky left-0 ${subtotalBg}`}>
+          └ {group} 소계 (Rs)
+        </td>
+        {MONTHS.map(m => (
+          <td key={m.key} className="border border-gray-300 px-2 py-1 text-right tabular-nums">
+            {fmt(monthSub(m.key))}
+          </td>
+        ))}
+        <td className="border border-gray-300 px-2 py-1 text-right bg-yellow-100 tabular-nums">
+          {fmt(groupSubTotal)}
+        </td>
+      </tr>
+    </>
   );
 }
