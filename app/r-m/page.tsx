@@ -5,6 +5,11 @@ export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import {
+  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  LineChart, Line,
+} from 'recharts';
 
 type MonthShort =
   | 'jan' | 'feb' | 'mar' | 'apr' | 'may' | 'jun'
@@ -183,10 +188,13 @@ export default function RmPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-              R&amp;M Monthly Cost — 기술팀 관제 13개 카테고리 + 제외 항목
+              R&amp;M Monthly Cost — 기술팀 관제 13개 카테고리
             </h1>
             <p className="text-xs sm:text-sm text-gray-500 mt-1">
-              편집 13개 (R&amp;M 7 + 부자재 6) · 제외 항목은 별도 표시 (전력비·일일소비량·기타). 셀 클릭 → 입력 → Enter.
+              편집 13개 (R&amp;M 7 + 부자재 6) · 제외 항목은 <span className="italic">공장 고정비/참고용 — 기술팀 관제 범위 외</span>. 셀 클릭 → 입력 → Enter.
+            </p>
+            <p className="text-[11px] sm:text-xs text-blue-700 mt-1 font-medium">
+              💡 도움말: <b>용접 코일(3.4)</b>이 4개월 누적 최대 항목 (Rs 8.12M, 약 26%).
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -220,7 +228,7 @@ export default function RmPage() {
               <SummaryCard label="[제외] 전력 (4.1)"         value={data.summary.power_total} tone="gray" />
               <SummaryCard label="[제외] 기타 (4.2/4.3)"     value={data.summary.other_total} tone="gray" />
               <SummaryCard
-                label="기술팀 관제 13개 합계 (편집)"
+                label="🎯 관제 합계 (편집 13개)"
                 value={data.summary.tech_managed_total}
                 tone="green"
                 emph
@@ -235,6 +243,8 @@ export default function RmPage() {
             <div className="text-[11px] sm:text-xs text-gray-500 mb-3 leading-relaxed">
               제외 항목 4건: <b>4.1 전력비</b> (공장 고정비), <b>4.2 일일 부자재 소비</b> (KG 운영지표), <b>4.3 기타 비용</b> (디젤·STP 인력 등), 그리고 <b>Tally 원본 / 분석 대시보드</b>는 별도 모듈에서 관리.
             </div>
+
+            <ChartsBlock rows={allRows} monthlyTech={monthlyTechTotals} />
           </>
         )}
 
@@ -446,5 +456,136 @@ function GroupBlock({
         </td>
       </tr>
     </>
+  );
+}
+
+/* ───────── charts ───────── */
+
+const PIE_COLORS = [
+  '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe',
+  '#6366f1', '#818cf8', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe',
+];
+
+function ChartsBlock({ rows, monthlyTech }: { rows: Row[]; monthlyTech: Record<MonthShort, number> }) {
+  // Only tech-managed (editable, Rs) rows for the breakdown charts.
+  const techRows = rows.filter(r => !r.readonly && r.unit === 'Rs' && r.total > 0);
+  const techTotal = techRows.reduce((s, r) => s + r.total, 0);
+
+  // Pie data: each of 13 categories, with percent.
+  const pieData = techRows
+    .map(r => ({
+      name: `${r.code} ${r.name}`,
+      name_ko: r.name_ko || '',
+      value: r.total,
+      pct: techTotal > 0 ? (r.total / techTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Bar data: 13 categories split by group.
+  const barData = techRows
+    .slice()
+    .sort((a, b) => b.total - a.total)
+    .map(r => ({
+      code: r.code,
+      label: `${r.code} ${r.name_ko || r.name}`,
+      RnM: r.group === 'R&M' ? r.total : 0,
+      Material: r.group === '부자재' ? r.total : 0,
+    }));
+
+  // Line data: monthly cumulative Jan-Apr (and remaining months even if 0)
+  let cum = 0;
+  const lineData = MONTHS.map(m => {
+    const v = monthlyTech[m.key] || 0;
+    cum += v;
+    return { month: m.label, monthly: v, cumulative: cum };
+  }).filter((d, i) => i < 4 || d.monthly > 0); // show Jan-Apr always, others only if data exists
+
+  const fmtRs = (n: number) =>
+    n >= 1_000_000 ? `Rs ${(n / 1_000_000).toFixed(2)}M` :
+    n >= 1_000     ? `Rs ${(n / 1_000).toFixed(0)}K`     :
+                     `Rs ${n.toLocaleString('en-IN')}`;
+
+  return (
+    <div className="bg-white border border-gray-300 rounded p-3 mb-3">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-sm sm:text-base font-bold text-gray-800">
+          📊 차트 시각화 — 관제 13개 카테고리 ({fmtRs(techTotal)})
+        </h2>
+        <div className="text-[11px] text-gray-500">단위: Rs · Jan–Apr 누적</div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* Pie: category share */}
+        <div className="border border-gray-200 rounded p-2">
+          <div className="text-xs font-semibold text-gray-700 mb-1">① 카테고리 비중 (13개)</div>
+          <div style={{ width: '100%', height: 280 }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%" cy="50%"
+                  outerRadius={95}
+                  label={(d: any) => `${d.pct.toFixed(1)}%`}
+                  labelLine={false}
+                >
+                  {pieData.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: any) => fmtRs(Number(v))} />
+                <Legend
+                  layout="vertical"
+                  align="right"
+                  verticalAlign="middle"
+                  wrapperStyle={{ fontSize: 10, maxHeight: 260, overflowY: 'auto' }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Bar: R&M (7) vs 부자재 (6) per category */}
+        <div className="border border-gray-200 rounded p-2">
+          <div className="text-xs font-semibold text-gray-700 mb-1">② R&amp;M 7개 vs 부자재 6개 (카테고리별)</div>
+          <div style={{ width: '100%', height: 280 }}>
+            <ResponsiveContainer>
+              <BarChart data={barData} margin={{ top: 5, right: 10, left: 0, bottom: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="code" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v/1_000_000).toFixed(1)}M`} />
+                <Tooltip formatter={(v: any) => fmtRs(Number(v))} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="RnM" name="R&M (1.1~1.7)" stackId="x" fill="#2563eb" />
+                <Bar dataKey="Material" name="부자재 (2.1, 3.1~3.5)" stackId="x" fill="#6366f1" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Line: monthly + cumulative */}
+        <div className="border border-gray-200 rounded p-2 lg:col-span-2">
+          <div className="text-xs font-semibold text-gray-700 mb-1">③ 월별 추세 (관제 13개 합계, 월별 & 누적)</div>
+          <div style={{ width: '100%', height: 260 }}>
+            <ResponsiveContainer>
+              <LineChart data={lineData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${(v/1_000_000).toFixed(1)}M`} />
+                <Tooltip formatter={(v: any) => fmtRs(Number(v))} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Line type="monotone" dataKey="monthly"    name="월별"   stroke="#2563eb" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="cumulative" name="누적"   stroke="#16a34a" strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="text-[11px] text-gray-500 mt-2 leading-relaxed">
+        * 차트는 <b>편집 가능한 13개 카테고리(R&amp;M 7 + 부자재 6)</b>만 포함합니다. 전력(4.1)·일일소비량(4.2)·기타(4.3)는 제외.
+      </div>
+    </div>
   );
 }

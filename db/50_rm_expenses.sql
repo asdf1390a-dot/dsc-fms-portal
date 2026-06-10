@@ -86,16 +86,16 @@ values
   ('1.1', 'Maintenance',         '유지관리',           'R&M',  false, 11, 1626734, 2499061, 1694056, 1803358, 'Rs', 2026, 'tally', null),
   ('1.2', 'JIG',                 '지그',               'R&M',  false, 12,  266756,  862805,  320060,  396872, 'Rs', 2026, 'tally', null),
   ('1.3', 'MOULD',               '몰드',               'R&M',  false, 13,  136271,  476973,   30210,       0, 'Rs', 2026, 'tally', null),
-  ('1.4', 'Fabrication',         '제작',               'R&M',  false, 14,  211699,  498430,  193721,  208524, 'Rs', 2026, 'tally', null),
+  ('1.4', 'Fabrication',         '제작',               'R&M',  false, 14,  211699,  498430,  193721,  208523, 'Rs', 2026, 'tally', '반올림 보정 -1 (apr)'),
   ('1.5', 'Other Team',          '다른팀',             'R&M',  false, 15,   77723,  105218,  185196,  197796, 'Rs', 2026, 'tally', null),
   ('1.6', 'Factory Maintenance', '공장유지보수',       'R&M',  false, 16, 1855155,  777104,  180474, 1415103, 'Rs', 2026, 'tally', null),
   ('1.7', 'STP & Cooling Tower', 'STP·냉각탑',         'R&M',  false, 17,   56400,   31100,   31100,   31100, 'Rs', 2026, 'tally', null),
 
   -- 부자재 group (editable)
-  ('2.1', 'Consumable Items',    '소모품',             '부자재', false, 21,  424070,  413205,  327411,  357836, 'Rs', 2026, 'tally', null),
+  ('2.1', 'Consumable Items',    '소모품',             '부자재', false, 21,  424070,  413205,  327411,  357835, 'Rs', 2026, 'tally', '반올림 보정 -1 (apr)'),
   ('3.1', 'CO2 Gas',             'CO2 가스',           '부자재', false, 31,  289800,  356800,  350000,  302400, 'Rs', 2026, 'tally', null),
-  ('3.2', 'Argon Gas',           '아르곤 가스',        '부자재', false, 32,  547347,  661942,  733441,  689366, 'Rs', 2026, 'tally', null),
-  ('3.3', 'Nitrogen Gas',        '질소 가스',          '부자재', false, 33,  143222,  151882,  164026,  158957, 'Rs', 2026, 'tally', null),
+  ('3.2', 'Argon Gas',           '아르곤 가스',        '부자재', false, 32,  547347,  661942,  733441,  689367, 'Rs', 2026, 'tally', '반올림 보정 +1 (apr)'),
+  ('3.3', 'Nitrogen Gas',        '질소 가스',          '부자재', false, 33,  143222,  151882,  164026,  158956, 'Rs', 2026, 'tally', '반올림 보정 -1 (apr)'),
   ('3.4', 'Welding Coil',        '용접 코일',          '부자재', false, 34, 1658955, 1977099, 2786791, 1701169, 'Rs', 2026, 'tally', null),
   ('3.5', 'AP3 Grease',          '그리스',             '부자재', false, 35,   69840,  174600,  192060,  457200, 'Rs', 2026, 'tally', null),
 
@@ -117,4 +117,5 @@ on conflict (year, category_code) do update set
   jan_amount       = excluded.jan_amount,
   feb_amount       = excluded.feb_amount,
   mar_amount       = excluded.mar_amount,
-  apr_amount       = excluded.apr_amount;
+  apr_amount       = excluded.apr_amount,
+  note             = excluded.note;
