@@ -1,8 +1,12 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import BottomNav from '../../components/BottomNav';
+
+// Charts: client-only to avoid SSR issues with recharts
+const RmCharts = dynamic(() => import('../../components/rm/RmCharts'), { ssr: false });
 
 const MONTH_KEYS = [
   'jan_amount','feb_amount','mar_amount','apr_amount',
@@ -118,8 +122,8 @@ export default function RmIndexPage() {
       <Head><title>R&M 비용 관리 | DSC FMS</title></Head>
       <main style={S.page}>
         <header style={S.header}>
-          <h1 style={S.h1}>R&M 비용 관리</h1>
-          <p style={S.sub}>13개 카테고리 · {year}년 · 단위 Rs</p>
+          <h1 style={S.h1}>R&M Monthly Cost — 기술팀 관제 13개 카테고리</h1>
+          <p style={S.sub}>{year}년 Jan–Apr · 단위 Rs</p>
         </header>
 
         {error && <div style={S.err}>오류: {error}</div>}
@@ -143,7 +147,13 @@ export default function RmIndexPage() {
 
         {/* Grand total */}
         <div style={S.totalBox}>
-          <div style={S.totalLabel}>합계</div>
+          <div>
+            <div style={S.totalLabel}>✓ 기술팀 관제 합계</div>
+            <div style={S.totalSub}>
+              {monthFilter === 0 ? `${year} Jan–Apr` : `${year}년 ${MONTH_LABELS[monthFilter - 1]}`}
+              {' · 편집 13개 (R&M 7 + 부자재 6)'}
+            </div>
+          </div>
           <div style={S.totalValue}>{fmtRs(grandTotal)}</div>
         </div>
 
@@ -178,14 +188,27 @@ export default function RmIndexPage() {
           );
         })}
 
+        {/* Charts */}
+        <section style={S.section}>
+          <div style={S.sectionHead}>
+            <span style={{ ...S.groupPill, background:'rgba(99,102,241,.12)', borderColor:'rgba(99,102,241,.4)', color:'#c7d2fe' }}>
+              시각화 (Charts)
+            </span>
+            <span style={S.sectionTotalMuted}>
+              {monthFilter === 0 ? 'Jan–Apr 누계 기준' : `${MONTH_LABELS[monthFilter - 1]} 기준`}
+            </span>
+          </div>
+          <RmCharts rows={activeRows} monthFilter={monthFilter} grandTotal={grandTotal} />
+        </section>
+
         {/* Excluded items section */}
         {excluded.length > 0 && (
           <section style={S.section}>
             <div style={S.sectionHead}>
               <span style={{ ...S.groupPill, background: 'rgba(234,179,8,.10)', borderColor: 'rgba(234,179,8,.35)', color: '#fde68a' }}>
-                제외 항목 (참고용)
+                제외 항목 (공장 고정비/참고용 — 기술팀 관제 범위 외)
               </span>
-              <span style={S.sectionTotalMuted}>기술팀 관제 외</span>
+              <span style={S.sectionTotalMuted}>참고용</span>
             </div>
             <div style={S.excludedGrid}>
               {excluded.map(it => (
@@ -240,9 +263,10 @@ const S = {
   chip: { flex:'0 0 auto', minHeight:44, padding:'8px 14px', borderRadius:999, border:'1px solid #1f2a3d', background:'#111c2e', color:'#cbd5e1', fontSize:14, cursor:'pointer' },
   chipActive: { background:'#1d4ed8', borderColor:'#3b82f6', color:'#fff' },
 
-  totalBox: { background:'#0f1a2c', border:'1px solid #1f2a3d', borderRadius:12, padding:'12px 14px', marginBottom:14, display:'flex', alignItems:'baseline', justifyContent:'space-between' },
-  totalLabel: { fontSize:13, color:'#94a3b8' },
-  totalValue: { fontSize:20, fontWeight:700, color:'#f1f5f9' },
+  totalBox: { background:'linear-gradient(135deg,#0f1a2c,#13243d)', border:'1px solid #2563eb55', borderRadius:12, padding:'14px 16px', marginBottom:14, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' },
+  totalLabel: { fontSize:13, color:'#93c5fd', fontWeight:700 },
+  totalSub: { fontSize:11, color:'#94a3b8', marginTop:3 },
+  totalValue: { fontSize:22, fontWeight:800, color:'#f1f5f9', letterSpacing:0.3 },
 
   section: { marginBottom:18 },
   sectionHead: { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 },
