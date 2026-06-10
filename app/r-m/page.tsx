@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 
 type MonthShort =
   | 'jan' | 'feb' | 'mar' | 'apr' | 'may' | 'jun'
@@ -50,11 +50,13 @@ const MONTHS: { key: MonthShort; label: string }[] = [
 
 const GROUP_ORDER = ['R&M', '부자재', '전력', '기타'] as const;
 const GROUP_LABEL: Record<string, string> = {
-  'R&M':   'R&M 수리비 (편집 가능)',
-  '부자재': '부자재 (편집 가능)',
-  '전력':   '전력 비용 (읽기 전용)',
-  '기타':   '기타 / 참고용 (읽기 전용)',
+  'R&M':   'R&M 유지보수 (1.1~1.7, 7개 · 편집 가능)',
+  '부자재': '부자재 (2.1, 3.1~3.5, 6개 · 편집 가능)',
+  '전력':   '[제외] 전력 비용 (4.1 · 공장 고정비 · 기술팀 관제 외)',
+  '기타':   '[제외] 기타·일일소비량 (4.2 KG, 4.3 Rs · 참고용)',
 };
+const EXCLUDED_GROUPS = new Set(['전력', '기타']);
+const EDITABLE_GROUPS = new Set(['R&M', '부자재']);
 
 function fmt(n: number, unit: string = 'Rs'): string {
   if (!Number.isFinite(n) || n === 0) return '';
@@ -181,10 +183,10 @@ export default function RmPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-              R&amp;M Monthly Cost — 통합 비용 관리 (16개 카테고리)
+              R&amp;M Monthly Cost — 기술팀 관제 13개 카테고리 + 제외 항목
             </h1>
             <p className="text-xs sm:text-sm text-gray-500 mt-1">
-              R&amp;M·부자재는 편집 가능, 전력·기타는 읽기 전용 (참고용). 셀 클릭 → 입력 → Enter.
+              편집 13개 (R&amp;M 7 + 부자재 6) · 제외 항목은 별도 표시 (전력비·일일소비량·기타). 셀 클릭 → 입력 → Enter.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -211,13 +213,29 @@ export default function RmPage() {
         )}
 
         {data && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
-            <SummaryCard label="R&M 합계"       value={data.summary.r_m_total} tone="blue" />
-            <SummaryCard label="부자재 합계"     value={data.summary.material_total} tone="indigo" />
-            <SummaryCard label="전력 (참고)"     value={data.summary.power_total} tone="gray" />
-            <SummaryCard label="기타 (참고)"     value={data.summary.other_total} tone="gray" />
-            <SummaryCard label="기술팀 관제 합계" value={data.summary.tech_managed_total} tone="green" emph />
-          </div>
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
+              <SummaryCard label="R&M 7개 (1.1~1.7)"      value={data.summary.r_m_total} tone="blue" />
+              <SummaryCard label="부자재 6개 (2.1, 3.1~3.5)" value={data.summary.material_total} tone="indigo" />
+              <SummaryCard label="[제외] 전력 (4.1)"         value={data.summary.power_total} tone="gray" />
+              <SummaryCard label="[제외] 기타 (4.2/4.3)"     value={data.summary.other_total} tone="gray" />
+              <SummaryCard
+                label="기술팀 관제 13개 합계 (편집)"
+                value={data.summary.tech_managed_total}
+                tone="green"
+                emph
+                sub={(() => {
+                  const denom = data.summary.tech_managed_total + data.summary.power_total + data.summary.other_total;
+                  if (!denom) return '';
+                  const pct = (data.summary.tech_managed_total / denom) * 100;
+                  return `전체 대비 ${pct.toFixed(1)}%`;
+                })()}
+              />
+            </div>
+            <div className="text-[11px] sm:text-xs text-gray-500 mb-3 leading-relaxed">
+              제외 항목 4건: <b>4.1 전력비</b> (공장 고정비), <b>4.2 일일 부자재 소비</b> (KG 운영지표), <b>4.3 기타 비용</b> (디젤·STP 인력 등), 그리고 <b>Tally 원본 / 분석 대시보드</b>는 별도 모듈에서 관리.
+            </div>
+          </>
         )}
 
         <div className="bg-white border border-gray-300 rounded overflow-x-auto">
@@ -241,22 +259,33 @@ export default function RmPage() {
               {loading && (
                 <tr><td colSpan={MONTHS.length + 2} className="text-center py-6 text-gray-400">로딩 중...</td></tr>
               )}
-              {!loading && data && GROUP_ORDER.map(group => {
+              {!loading && data && GROUP_ORDER.map((group, idx) => {
                 const rows = data.groups[group] || [];
                 if (rows.length === 0) return null;
                 const groupReadOnly = rows.every(r => r.readonly);
+                const prevGroup = idx > 0 ? GROUP_ORDER[idx - 1] : null;
+                const showExcludedDivider =
+                  EXCLUDED_GROUPS.has(group) && (!prevGroup || EDITABLE_GROUPS.has(prevGroup));
                 return (
-                  <GroupBlock
-                    key={group}
-                    group={group}
-                    rows={rows}
-                    readOnly={groupReadOnly}
-                    editing={editing}
-                    setEditing={setEditing}
-                    editValue={editValue}
-                    setEditValue={setEditValue}
-                    saveCell={saveCell}
-                  />
+                  <Fragment key={group}>
+                    {showExcludedDivider && (
+                      <tr className="bg-gray-300 font-bold text-gray-800">
+                        <td colSpan={MONTHS.length + 2} className="border border-gray-400 px-2 py-2 sticky left-0 bg-gray-300 text-sm">
+                          ═══ 제외 항목 (Excluded — 참고용·읽기 전용) ═══
+                        </td>
+                      </tr>
+                    )}
+                    <GroupBlock
+                      group={group}
+                      rows={rows}
+                      readOnly={groupReadOnly}
+                      editing={editing}
+                      setEditing={setEditing}
+                      editValue={editValue}
+                      setEditValue={setEditValue}
+                      saveCell={saveCell}
+                    />
+                  </Fragment>
                 );
               })}
 
@@ -264,7 +293,7 @@ export default function RmPage() {
                 <>
                   <tr className="bg-blue-50 font-bold">
                     <td className="border border-gray-300 px-2 py-2 sticky left-0 bg-blue-50">
-                      기술팀 관제 월별 합계 (Rs)
+                      기술팀 관제 13개 월별 합계 (Rs)
                     </td>
                     {MONTHS.map(m => (
                       <td key={m.key} className="border border-gray-300 px-2 py-2 text-right">
@@ -307,7 +336,7 @@ export default function RmPage() {
 
 /* ───────── components ───────── */
 
-function SummaryCard({ label, value, tone, emph }: { label: string; value: number; tone: 'blue'|'indigo'|'gray'|'green'; emph?: boolean }) {
+function SummaryCard({ label, value, tone, emph, sub }: { label: string; value: number; tone: 'blue'|'indigo'|'gray'|'green'; emph?: boolean; sub?: string }) {
   const bg = {
     blue:   'bg-blue-50   border-blue-200   text-blue-900',
     indigo: 'bg-indigo-50 border-indigo-200 text-indigo-900',
@@ -320,6 +349,7 @@ function SummaryCard({ label, value, tone, emph }: { label: string; value: numbe
       <div className="text-sm sm:text-base font-bold tabular-nums">
         Rs {value.toLocaleString('en-IN')}
       </div>
+      {sub && <div className="text-[10px] opacity-70 mt-0.5">{sub}</div>}
     </div>
   );
 }
