@@ -2,10 +2,40 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Asset } from '@/lib/assets/types';
+import { Asset, AssetClass } from '@/lib/assets/types';
 import { useLanguage } from '@/lib/i18n/context';
 import { t } from '@/lib/i18n/translations';
 import { LanguageSelector } from '@/components/LanguageSelector';
+
+type SavedSearch = {
+  name: string;
+  q: string;
+  status: string;
+  location: string;
+  asset_class_code: string;
+  per_page: number;
+};
+
+const SAVED_SEARCHES_KEY = 'fms.assets.savedSearches.v1';
+
+function loadSavedSearches(): SavedSearch[] {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(SAVED_SEARCHES_KEY) : null;
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedSearches(list: SavedSearch[]) {
+  try {
+    localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(list));
+  } catch {
+    // ignore quota errors
+  }
+}
 
 export default function AssetsClient() {
   const router = useRouter();
@@ -23,10 +53,16 @@ export default function AssetsClient() {
   const [filters, setFilters] = useState({
     location: searchParams?.get('location') || '',
     status: searchParams?.get('status') || '',
+    asset_class_code: searchParams?.get('asset_class_code') || '',
   });
   // Local input states (debounce-friendly: user types, commits via Enter/blur)
   const [searchInput, setSearchInput] = useState(searchQuery);
   const [locationInput, setLocationInput] = useState(filters.location);
+  // Asset class options (loaded from Supabase)
+  const [assetClasses, setAssetClasses] = useState<AssetClass[]>([]);
+  // Saved searches (localStorage)
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [saveName, setSaveName] = useState('');
 
   // Sync state from URL when query params change (e.g. back/forward nav)
   useEffect(() => {
@@ -35,28 +71,69 @@ export default function AssetsClient() {
     const q = searchParams?.get('q') || '';
     const loc = searchParams?.get('location') || '';
     const st = searchParams?.get('status') || '';
+    const acc = searchParams?.get('asset_class_code') || '';
     setCurrentPage(page);
     setPerPage(pp);
     setSearchQuery(q);
     setSearchInput(q);
-    setFilters({ location: loc, status: st });
+    setFilters({ location: loc, status: st, asset_class_code: acc });
     setLocationInput(loc);
   }, [searchParams]);
 
+  // Load saved searches on mount
+  useEffect(() => {
+    setSavedSearches(loadSavedSearches());
+  }, []);
+
+  // Load asset classes once (for category dropdown)
+  useEffect(() => {
+    async function loadClasses() {
+      try {
+        const token = localStorage.getItem('sb-token');
+        if (!token) return;
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/asset_classes?select=code,category_code,name_en,name_ko&order=code.asc`,
+          {
+            headers: {
+              apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        if (res.ok) {
+          const data = (await res.json()) as AssetClass[];
+          setAssetClasses(data);
+        }
+      } catch {
+        // silent
+      }
+    }
+    loadClasses();
+  }, []);
+
   // Helper: push URL with current params
   const updateUrl = useCallback(
-    (next: { page?: number; per_page?: number; q?: string; location?: string; status?: string }) => {
+    (next: {
+      page?: number;
+      per_page?: number;
+      q?: string;
+      location?: string;
+      status?: string;
+      asset_class_code?: string;
+    }) => {
       const params = new URLSearchParams();
       const page = next.page ?? currentPage;
       const pp = next.per_page ?? perPage;
       const q = next.q ?? searchQuery;
       const loc = next.location ?? filters.location;
       const st = next.status ?? filters.status;
+      const acc = next.asset_class_code ?? filters.asset_class_code;
       if (page > 1) params.set('page', String(page));
       if (pp !== 50) params.set('per_page', String(pp));
       if (q) params.set('q', q);
       if (loc) params.set('location', loc);
       if (st) params.set('status', st);
+      if (acc) params.set('asset_class_code', acc);
       const qs = params.toString();
       router.push(qs ? `/assets?${qs}` : '/assets');
     },
@@ -90,6 +167,9 @@ export default function AssetsClient() {
           const safeLoc = filters.location.replace(/[(),*]/g, '');
           qsParts.push(`location=ilike.*${safeLoc}*`);
         }
+        if (filters.asset_class_code) {
+          qsParts.push(`asset_class_code=eq.${encodeURIComponent(filters.asset_class_code)}`);
+        }
 
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/assets?${qsParts.join('&')}`,
@@ -116,7 +196,51 @@ export default function AssetsClient() {
     }
 
     loadAssets();
-  }, [router, currentPage, perPage, searchQuery, filters.status, filters.location]);
+  }, [router, currentPage, perPage, searchQuery, filters.status, filters.location, filters.asset_class_code]);
+
+  // Saved search handlers
+  const handleSaveCurrentSearch = () => {
+    const name = saveName.trim();
+    if (!name) {
+      alert('Enter a name for this search');
+      return;
+    }
+    const entry: SavedSearch = {
+      name,
+      q: searchQuery,
+      status: filters.status,
+      location: filters.location,
+      asset_class_code: filters.asset_class_code,
+      per_page: perPage,
+    };
+    const next = [...savedSearches.filter((s) => s.name !== name), entry];
+    setSavedSearches(next);
+    persistSavedSearches(next);
+    setSaveName('');
+  };
+
+  const handleApplySavedSearch = (s: SavedSearch) => {
+    setSearchQuery(s.q);
+    setSearchInput(s.q);
+    setFilters({ location: s.location, status: s.status, asset_class_code: s.asset_class_code });
+    setLocationInput(s.location);
+    setPerPage(s.per_page || 50);
+    setCurrentPage(1);
+    updateUrl({
+      q: s.q,
+      status: s.status,
+      location: s.location,
+      asset_class_code: s.asset_class_code,
+      per_page: s.per_page || 50,
+      page: 1,
+    });
+  };
+
+  const handleDeleteSavedSearch = (name: string) => {
+    const next = savedSearches.filter((s) => s.name !== name);
+    setSavedSearches(next);
+    persistSavedSearches(next);
+  };
 
   const handleExport = async (format: 'excel' | 'csv') => {
     try {
@@ -276,6 +400,26 @@ export default function AssetsClient() {
               className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+          <div className="min-w-[180px]">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Asset Class</label>
+            <select
+              value={filters.asset_class_code}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFilters((f) => ({ ...f, asset_class_code: v }));
+                setCurrentPage(1);
+                updateUrl({ asset_class_code: v, page: 1 });
+              }}
+              className="w-full px-3 py-2 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">All classes</option>
+              {assetClasses.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code} — {c.name_en}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="min-w-[110px]">
             <label className="block text-xs font-medium text-gray-600 mb-1">Per page</label>
             <select
@@ -293,6 +437,54 @@ export default function AssetsClient() {
               <option value={200}>200</option>
             </select>
           </div>
+        </div>
+
+        {/* Saved Searches */}
+        <div className="mb-6 bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <input
+              type="text"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="Name this search..."
+              className="flex-1 min-w-[180px] px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <button
+              type="button"
+              onClick={handleSaveCurrentSearch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+            >
+              Save current
+            </button>
+          </div>
+          {savedSearches.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {savedSearches.map((s) => (
+                <span
+                  key={s.name}
+                  className="inline-flex items-center gap-1 bg-gray-100 border border-gray-200 rounded-full pl-3 pr-1 py-1 text-xs"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleApplySavedSearch(s)}
+                    className="text-gray-800 hover:text-blue-700 font-medium"
+                  >
+                    {s.name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSavedSearch(s.name)}
+                    aria-label={`Delete ${s.name}`}
+                    className="ml-1 w-5 h-5 inline-flex items-center justify-center rounded-full text-gray-500 hover:bg-red-100 hover:text-red-700"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">No saved searches yet. Set filters and click Save current.</p>
+          )}
         </div>
 
         {/* Content */}
