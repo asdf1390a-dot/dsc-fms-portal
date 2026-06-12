@@ -46,8 +46,8 @@ export default function AssetAnalyticsPage() {
     setLoading(true);
     setError(null);
     Promise.all([
-      fetchJson(`/api/assets/analytics/lifecycle?group_by=${encodeURIComponent(groupBy)}`),
-      fetchJson(`/api/assets/analytics/edit-patterns?time_range=${encodeURIComponent(timeRange)}`),
+      fetchJson(`/api/asset-analytics/lifecycle?group_by=${encodeURIComponent(groupBy)}`),
+      fetchJson(`/api/asset-analytics/edit-patterns?time_range=${encodeURIComponent(timeRange)}`),
     ])
       .then(([lc, pt]) => {
         if (cancelled) return;
@@ -245,8 +245,8 @@ export default function AssetAnalyticsPage() {
         </section>
 
         <div style={S.footnote}>
-          Source: <code style={S.code}>/api/assets/analytics/lifecycle</code> ·{' '}
-          <code style={S.code}>/api/assets/analytics/edit-patterns</code>
+          Source: <code style={S.code}>/api/asset-analytics/lifecycle</code> ·{' '}
+          <code style={S.code}>/api/asset-analytics/edit-patterns</code>
         </div>
       </main>
       <BottomNav />

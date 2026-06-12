@@ -1,4 +1,4 @@
-// PATCH /api/assets/[assetId]/restore
+// PATCH /api/asset-restore/[assetId]
 // Phase 3-3 — Restore a previously-disposed asset (admin / authenticated only).
 //
 // Body:
@@ -13,8 +13,8 @@
 // yet, so we accept any authenticated user and record changed_by — this matches
 // the existing dispose endpoint pattern.
 
-import { supabaseAdmin } from '../../../../lib/supabase-admin';
-import { requireUser } from '../../../../lib/career-auth';
+import { supabaseAdmin } from '../../../lib/supabase-admin';
+import { requireUser } from '../../../lib/career-auth';
 
 const DISPOSED_STATUSES = new Set(['sold', 'scrapped', 'disposed']);
 

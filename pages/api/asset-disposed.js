@@ -1,4 +1,4 @@
-// GET /api/assets/disposed
+// GET /api/asset-disposed
 // Phase 3-3 — List disposed assets with summary by reason.
 //
 // Query:
@@ -12,7 +12,7 @@
 // Auth: anon read allowed (matches existing asset_disposals RLS select=true).
 // Gracefully degrades when asset_disposals is missing (db/46 not applied).
 
-import { supabaseAdmin } from '../../../lib/supabase-admin';
+import { supabaseAdmin } from '../../lib/supabase-admin';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {

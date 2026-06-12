@@ -1,4 +1,4 @@
-// GET /api/assets/analytics/edit-patterns
+// GET /api/asset-analytics/edit-patterns
 // Phase 3-4 — Edit-pattern analytics derived from asset_edit_history.
 //
 // Query:
@@ -12,7 +12,7 @@
 //
 // Gracefully degrades when asset_edit_history is missing (db/46 not applied).
 
-import { supabaseAdmin } from '../../../../lib/supabase-admin';
+import { supabaseAdmin } from '../../../lib/supabase-admin';
 
 const RANGES = {
   week: 7,

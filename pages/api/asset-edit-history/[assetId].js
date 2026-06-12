@@ -1,4 +1,4 @@
-// GET /api/assets/[assetId]/edit-history
+// GET /api/asset-edit-history/[assetId]
 // Phase 3-2 — Edit history for a single asset.
 //
 // Query:
@@ -13,7 +13,7 @@
 // Depends on: db/46_asset_master_phase3_schema.sql (asset_edit_history table).
 // Gracefully degrades when the table doesn't exist yet (returns available=false).
 
-import { supabaseAdmin } from '../../../../lib/supabase-admin';
+import { supabaseAdmin } from '../../../lib/supabase-admin';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {

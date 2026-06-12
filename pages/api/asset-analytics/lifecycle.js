@@ -1,4 +1,4 @@
-// GET /api/assets/analytics/lifecycle
+// GET /api/asset-analytics/lifecycle
 // Phase 3-4 — Asset lifecycle analytics (creation → disposal patterns).
 //
 // Query:
@@ -15,7 +15,7 @@
 // Auth: anon read allowed (analytics summary).
 // Gracefully degrades when asset_disposals is missing.
 
-import { supabaseAdmin } from '../../../../lib/supabase-admin';
+import { supabaseAdmin } from '../../../lib/supabase-admin';
 
 const ALLOWED_GROUP_BY = new Set(['category', 'location', 'status']);
 const MS_PER_DAY = 1000 * 60 * 60 * 24;

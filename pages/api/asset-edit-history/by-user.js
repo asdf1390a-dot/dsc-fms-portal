@@ -1,4 +1,4 @@
-// GET /api/assets/edit-history/by-user
+// GET /api/asset-edit-history/by-user
 // Phase 3-2 — Audit endpoint: list edit-history entries authored by a user.
 //
 // Query:
@@ -11,8 +11,8 @@
 // Returns enriched rows with asset_name/machine_asset_number for context.
 // Auth: Bearer JWT required (any authenticated user; treat as audit-readonly).
 
-import { supabaseAdmin } from '../../../../lib/supabase-admin';
-import { requireUser } from '../../../../lib/career-auth';
+import { supabaseAdmin } from '../../../lib/supabase-admin';
+import { requireUser } from '../../../lib/career-auth';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
