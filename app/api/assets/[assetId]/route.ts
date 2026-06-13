@@ -156,6 +156,25 @@ export async function PUT(
       }
     }
 
+    // Pre-fetch original for per-field diff (Phase 3-2 change tracking)
+    const { data: before, error: beforeErr } = await supabase
+      .from('assets')
+      .select('*')
+      .eq('id', assetId)
+      .single();
+    if (beforeErr) {
+      if (beforeErr.code === 'PGRST116') {
+        return Response.json(
+          { success: false, error: { message: 'Asset not found' } },
+          { status: 404 }
+        );
+      }
+      return Response.json(
+        { success: false, error: { message: beforeErr.message } },
+        { status: 500 }
+      );
+    }
+
     const { data: updated, error } = await supabase
       .from('assets')
       .update(update)
@@ -176,6 +195,39 @@ export async function PUT(
       );
     }
 
+    // Phase 3-2: record per-field change history (degrades if table missing)
+    const historyRows: Array<{
+      asset_id: string;
+      field_name: string;
+      old_value: string | null;
+      new_value: string | null;
+      changed_by: string;
+    }> = [];
+    for (const key of UPDATABLE_FIELDS) {
+      if (!(key in update)) continue;
+      const oldV = (before as any)?.[key];
+      const newV = (update as any)[key];
+      const oldS = oldV == null ? null : typeof oldV === 'object' ? JSON.stringify(oldV) : String(oldV);
+      const newS = newV == null ? null : typeof newV === 'object' ? JSON.stringify(newV) : String(newV);
+      if (oldS === newS) continue;
+      historyRows.push({
+        asset_id: assetId,
+        field_name: key,
+        old_value: oldS,
+        new_value: newS,
+        changed_by: user.id,
+      });
+    }
+    if (historyRows.length > 0) {
+      const { error: histErr } = await supabase
+        .from('asset_edit_history')
+        .insert(historyRows);
+      if (histErr && histErr.code !== '42P01') {
+        // log but don't fail the update
+        console.warn('asset_edit_history insert failed:', histErr.message);
+      }
+    }
+
     return Response.json({ success: true, data: updated, message: 'Asset updated' });
   } catch (error) {
     console.error('PUT error:', error);
@@ -187,6 +239,14 @@ export async function PUT(
       { status: 500 }
     );
   }
+}
+
+// Phase 3-2 alias: accept POST as update (some clients prefer POST)
+export async function POST(
+  request: Request,
+  ctx: { params: { assetId: string } }
+): Promise<Response> {
+  return PUT(request, ctx);
 }
 
 export async function DELETE(
